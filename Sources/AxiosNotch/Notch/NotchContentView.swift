@@ -13,44 +13,59 @@ struct NotchContentView: View {
     @ObservedObject var controller: NotchWindowController
     @ObservedObject var usageStore: AgentUsageStore
 
-    /// Closed, this hugs the physical notch exactly. Open, the black
-    /// background fills the whole shape with no gap or transparent hole —
-    /// continuous from the very top, like the notch and the panel are one
-    /// piece — but the actual readable content (tabs, text) is padded down
-    /// internally so none of it renders under the physical camera housing,
-    /// where it would just be invisible.
+    private var isOpen: Bool { controller.state != .closed }
+
+    private var shape: NotchShape {
+        let radii = isOpen ? NotchWindowController.openRadii : NotchWindowController.closedRadii
+        return NotchShape(topCornerRadius: radii.top, bottomCornerRadius: radii.bottom)
+    }
+
+    /// One black surface whose size and corner radii spring between states —
+    /// the notch and the panel are a single continuous shape. Readable
+    /// content is padded below the camera housing so none of it renders
+    /// where it would be invisible.
     var body: some View {
-        Group {
-            switch controller.state {
-            case .closed:
-                closedView
-                    .frame(width: controller.notchStripSize.width, height: controller.notchStripSize.height)
-                    .background(Color.black)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            case .expanded, .terminal:
-                card
-            }
+        surface
+            .frame(width: controller.surfaceSize.width, height: controller.surfaceSize.height, alignment: .top)
+            .background(Color.black)
+            .overlay(alignment: .top) { closeStrip }
+            .clipShape(shape)
+            .compositingGroup()
+            .shadow(color: (isOpen || controller.isHovering) ? .black.opacity(0.6) : .clear, radius: 10)
+            .contentShape(shape)
+            .onHover { controller.setHovering($0) }
+            .animation(.spring(response: isOpen ? 0.42 : 0.45, dampingFraction: 1.0), value: controller.state)
+            .animation(.bouncy.speed(1.2), value: controller.isHovering)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// While open, the strip where the physical notch sits is a tap target
+    /// that closes the panel — the same spot that opened it.
+    @ViewBuilder
+    private var closeStrip: some View {
+        if isOpen {
+            Color.clear
+                .frame(width: controller.notchStripSize.width, height: controller.notchStripSize.height)
+                .contentShape(Rectangle())
+                .onTapGesture { controller.collapse() }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     @ViewBuilder
-    private var card: some View {
+    private var surface: some View {
         switch controller.state {
+        case .closed:
+            closedView
         case .expanded:
             NotchDashboardView(controller: controller, usageStore: usageStore)
+                .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black)
-                .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 18, bottomTrailingRadius: 18))
+                .transition(.opacity)
         case .terminal(let provider):
             TerminalPanelView(provider: provider, onClose: { controller.closeTerminal() })
+                .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black)
-                .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 14, bottomTrailingRadius: 14))
-        case .closed:
-            EmptyView()
+                .transition(.opacity)
         }
     }
 
@@ -70,6 +85,7 @@ struct NotchContentView: View {
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.7))
         }
+        .frame(width: controller.notchStripSize.width, height: controller.notchStripSize.height)
         .contentShape(Rectangle())
         .onTapGesture { controller.toggleExpanded() }
     }
