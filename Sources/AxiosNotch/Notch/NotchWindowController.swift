@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import QuartzCore
 import SwiftUI
 
@@ -26,6 +27,14 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
 /// positioning are handled here; `NotchContentView` only reacts to `state`.
 final class NotchWindowController: NSObject, ObservableObject {
     @Published private(set) var state: NotchState = .closed
+    /// Set for a few seconds when an answer finishes while the notch is
+    /// closed; the closed notch grows downward to announce it.
+    @Published private(set) var banner: FinishNotice?
+    static let bannerHeight: CGFloat = 34
+    static let bannerMinWidth: CGFloat = 220
+    private var bannerDismiss: DispatchWorkItem?
+    private var finishObserver: AnyCancellable?
+
     /// Where the terminal's close button returns to.
     private var stateBeforeTerminal: NotchState = .picker
 
@@ -65,6 +74,10 @@ final class NotchWindowController: NSObject, ObservableObject {
                 size.width += hoverGrowth.width
                 size.height += hoverGrowth.height
             }
+            if banner != nil {
+                size.height += Self.bannerHeight
+                size.width = max(size.width, Self.bannerMinWidth)
+            }
             return size
         case .picker: return CGSize(width: pickerSize.width, height: closedSize.height + pickerSize.height)
         case .usage: return CGSize(width: usageSize.width, height: closedSize.height + usageSize.height)
@@ -92,6 +105,11 @@ final class NotchWindowController: NSObject, ObservableObject {
         let content = NotchContentView(controller: self, usageStore: usageStore)
         let hostingView = NotchHostingView(rootView: content)
         panel.contentView = hostingView
+
+        finishObserver = TerminalSessionStore.shared.$lastFinish
+            .compactMap { $0 }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notice in self?.announce(notice) }
 
         applyFrame()
         panel.orderFrontRegardless()
@@ -182,8 +200,23 @@ final class NotchWindowController: NSObject, ObservableObject {
         setState(stateBeforeTerminal == .closed ? .picker : stateBeforeTerminal)
     }
 
+    /// Shows the "answer ready" banner for a few seconds, only while closed —
+    /// an open panel already has the user's attention.
+    private func announce(_ notice: FinishNotice) {
+        guard state == .closed else { return }
+        bannerDismiss?.cancel()
+        banner = notice
+        let dismiss = DispatchWorkItem { [weak self] in self?.banner = nil }
+        bannerDismiss = dismiss
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5, execute: dismiss)
+    }
+
     private func setState(_ newState: NotchState) {
         guard newState != state else { return }
+        if newState != .closed {
+            bannerDismiss?.cancel()
+            banner = nil
+        }
         state = newState
         if case .terminal = state {
             panel.makeKeyAndOrderFront(nil)

@@ -35,6 +35,7 @@ struct NotchContentView: View {
             .shadow(color: (isOpen || controller.isHovering) ? .black.opacity(0.6) : .clear, radius: 10)
             .contentShape(shape)
             .onHover { controller.setHovering($0) }
+            .animation(.spring(response: 0.42, dampingFraction: 0.9), value: controller.banner)
             .animation(.spring(response: isOpen ? 0.42 : 0.45, dampingFraction: 1.0), value: controller.state)
             .animation(.bouncy.speed(1.2), value: controller.isHovering)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -76,6 +77,21 @@ struct NotchContentView: View {
     }
 
     private var closedView: some View {
+        VStack(spacing: 0) {
+            closedCore
+                .frame(width: controller.notchStripSize.width, height: controller.notchStripSize.height)
+            if let notice = controller.banner {
+                FinishBanner(provider: notice.provider)
+                    .frame(height: NotchWindowController.bannerHeight)
+                    .transition(.opacity.animation(.easeOut(duration: 0.2).delay(0.12)))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .contentShape(Rectangle())
+        .onTapGesture { controller.toggleExpanded() }
+    }
+
+    private var closedCore: some View {
         HStack(spacing: 6) {
             Group {
                 if let axiosMark {
@@ -98,8 +114,29 @@ struct NotchContentView: View {
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: sessions.totalUnread)
-        .frame(width: controller.notchStripSize.width, height: controller.notchStripSize.height)
-        .contentShape(Rectangle())
-        .onTapGesture { controller.toggleExpanded() }
+    }
+}
+
+/// "Answer ready" announcement shown below the notch: who answered.
+private struct FinishBanner: View {
+    let provider: AgentProvider?
+
+    private var tint: Color { provider.map(NotchTheme.accent(for:)) ?? .white }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            if let provider {
+                ProviderGlyph(provider: provider, size: 16)
+            } else {
+                Image(systemName: "terminal")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            Text(provider == nil ? "Comando concluído" : "Resposta pronta")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.white.opacity(0.9))
+                .lineLimit(1)
+            Circle().fill(tint).frame(width: 5, height: 5)
+        }
     }
 }

@@ -18,6 +18,13 @@ private final class ActivityTerminalView: LocalProcessTerminalView {
     }
 }
 
+/// An answer that finished while the user was not looking at that terminal.
+struct FinishNotice: Equatable {
+    /// `nil` is the clean shell.
+    let provider: AgentProvider?
+    let id = UUID()
+}
+
 /// Keeps each terminal alive after its panel closes. SwiftUI destroys a
 /// view when its state leaves the screen, which would kill the process and
 /// lose the conversation; here the `LocalProcessTerminalView` (and the PTY
@@ -35,6 +42,8 @@ final class TerminalSessionStore: ObservableObject {
     @Published private(set) var workingKeys: Set<String> = []
     /// Finished answers the user has not seen yet, per session.
     @Published private(set) var unread: [String: Int] = [:]
+    /// The most recent unseen finish, for the notch to announce.
+    @Published private(set) var lastFinish: FinishNotice?
 
     /// The session whose terminal is currently on screen, if any.
     private var visibleKey: String?
@@ -114,6 +123,7 @@ final class TerminalSessionStore: ObservableObject {
         session.onFinished = { [weak self] in
             guard let self, self.visibleKey != key else { return }
             self.unread[key, default: 0] += 1
+            self.lastFinish = FinishNotice(provider: provider)
         }
         session.onExit = { [weak self, weak session] in
             // Only drop it if it is still the current session for this key.
