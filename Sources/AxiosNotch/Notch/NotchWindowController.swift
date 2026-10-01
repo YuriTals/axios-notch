@@ -56,7 +56,8 @@ final class NotchWindowController: NSObject, ObservableObject {
     private var isHovering = false
 
     private let hoverGrowth = CGSize(width: 10, height: 5)
-    private let expandedSize = CGSize(width: 380, height: 480)
+    /// Landscape, like a widget card — not a tall scrolling panel.
+    private let expandedSize = CGSize(width: 640, height: 170)
     private let terminalSize = CGSize(width: 640, height: 420)
 
     /// Hugs the real notch exactly when there is one — same width and height
