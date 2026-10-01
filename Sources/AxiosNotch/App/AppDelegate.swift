@@ -41,6 +41,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
 
+        let settingsItem = NSMenuItem(title: "Ajustes…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
         let pauseItem = NSMenuItem(title: "Pausar", action: #selector(togglePause), keyEquivalent: "")
         pauseItem.target = self
         menu.addItem(pauseItem)
@@ -67,6 +71,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             usageStore?.start()
             pauseMenuItem?.title = "Pausar"
         }
+    }
+
+    @objc private func openSettings() {
+        if isPaused { togglePause() }
+        notchController?.showSettings()
     }
 
     @objc private func quit() {

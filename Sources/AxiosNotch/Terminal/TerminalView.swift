@@ -165,6 +165,11 @@ final class TerminalSessionStore: ObservableObject {
         return session.view
     }
 
+    /// Applies the current font size to every live terminal.
+    func refreshFonts() {
+        for session in sessions.values { session.view.font = TerminalFont.resolve() }
+    }
+
     /// The terminal for `provider` appeared on screen: whatever finished
     /// while away is now seen.
     func didShow(_ provider: AgentProvider?) {
@@ -213,7 +218,7 @@ struct TerminalRepresentable: NSViewRepresentable {
 /// installed Nerd Font *Mono* variant (fixed-width glyphs, so columns line
 /// up), then any Nerd Font, then the system monospaced font.
 enum TerminalFont {
-    static let size: CGFloat = 13
+    static var size: CGFloat { CGFloat(AppSettings.shared.terminalFontSize) }
     private static let preferredFamilies = ["FiraCode Nerd Font Mono", "JetBrainsMono Nerd Font Mono", "MesloLGS Nerd Font Mono", "Hack Nerd Font Mono"]
 
     static func resolve(size: CGFloat = TerminalFont.size) -> NSFont {
@@ -237,8 +242,11 @@ struct TerminalPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Image(systemName: provider?.symbolName ?? "terminal")
-                    .foregroundStyle(.white.opacity(0.7))
+                if let provider {
+                    ProviderGlyph(provider: provider, size: 14)
+                } else {
+                    TerminalIcon().frame(width: 14, height: 14)
+                }
                 Text(provider?.displayName ?? "Terminal")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.7))

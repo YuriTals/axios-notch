@@ -1,0 +1,107 @@
+import SwiftUI
+
+/// Preferences, shown inside the notch like every other panel.
+struct NotchSettingsView: View {
+    @ObservedObject var controller: NotchWindowController
+    @ObservedObject private var settings = AppSettings.shared
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 10) {
+                IconButton(systemName: "chevron.left") { controller.showPicker() }
+                    .accessibilityLabel("Voltar")
+                Text("Ajustes")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                Spacer()
+            }
+
+            HStack(alignment: .top, spacing: 10) {
+                VStack(spacing: 10) {
+                    SettingsCard(title: "Geral") {
+                        Toggle("Iniciar ao fazer login", isOn: $settings.launchAtLogin)
+                        if let error = settings.loginError {
+                            Caption(error, color: Color(red: 0.95, green: 0.45, blue: 0.4))
+                        } else if !LoginItem.isBundled {
+                            Caption("Fora de um .app: usa um LaunchAgent deste binário.")
+                        }
+                    }
+                    SettingsCard(title: "Acessibilidade") {
+                        Text("Reduzir movimento")
+                        Picker("", selection: $settings.motion) {
+                            ForEach(MotionPreference.allCases) { Text($0.label).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        Caption("Troca saltos e molas por transições simples.")
+                    }
+                }
+                VStack(spacing: 10) {
+                    SettingsCard(title: "Vibração") {
+                        Toggle("Vibrar ao passar o mouse", isOn: $settings.hoverHaptic)
+                        Picker("", selection: $settings.hapticStrength) {
+                            ForEach(HapticStrength.allCases) { Text($0.label).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .disabled(!settings.hoverHaptic)
+                    }
+                    SettingsCard(title: "Avisos e terminal") {
+                        Toggle("Aviso de resposta pronta", isOn: $settings.finishBanner)
+                        HStack {
+                            Text("Duração")
+                            Slider(value: $settings.bannerSeconds, in: 2...10, step: 0.5)
+                                .disabled(!settings.finishBanner)
+                            Text(String(format: "%.1f s", settings.bannerSeconds))
+                                .monospacedDigit()
+                                .foregroundStyle(.white.opacity(0.6))
+                                .frame(width: 40, alignment: .trailing)
+                        }
+                        Stepper(value: $settings.terminalFontSize, in: 10...20, step: 1) {
+                            Text("Fonte do terminal: \(Int(settings.terminalFontSize)) pt")
+                        }
+                    }
+                }
+            }
+        }
+        .font(.system(size: 12))
+        .foregroundStyle(.white.opacity(0.9))
+        .toggleStyle(.switch)
+        .tint(NotchTheme.claudeAccent)
+        .environment(\.colorScheme, .dark)
+        .padding(.horizontal, 6)
+        .padding(.bottom, 14)
+        .padding(.top, 4)
+    }
+}
+
+private struct SettingsCard<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.white.opacity(0.5))
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(NotchTheme.tileFill)
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(NotchTheme.hairline, lineWidth: 1))
+        }
+    }
+}
+
+private struct Caption: View {
+    let text: String
+    var color: Color = .white.opacity(0.4)
+    init(_ text: String, color: Color = .white.opacity(0.4)) { self.text = text; self.color = color }
+
+    var body: some View {
+        Text(text).font(.system(size: 10)).foregroundStyle(color).fixedSize(horizontal: false, vertical: true)
+    }
+}

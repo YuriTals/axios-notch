@@ -13,6 +13,7 @@ struct NotchContentView: View {
     @ObservedObject var controller: NotchWindowController
     @ObservedObject var usageStore: AgentUsageStore
     @ObservedObject private var sessions = TerminalSessionStore.shared
+    @ObservedObject private var settings = AppSettings.shared
 
     private var isOpen: Bool { controller.state != .closed }
 
@@ -35,9 +36,9 @@ struct NotchContentView: View {
             .shadow(color: (isOpen || controller.isHovering) ? .black.opacity(0.6) : .clear, radius: 10)
             .contentShape(shape)
             .onHover { controller.setHovering($0) }
-            .animation(.spring(response: 0.42, dampingFraction: 0.9), value: controller.banner)
-            .animation(.spring(response: isOpen ? 0.42 : 0.45, dampingFraction: 1.0), value: controller.state)
-            .animation(.bouncy.speed(1.2), value: controller.isHovering)
+            .animation(NotchMotion.spring(response: 0.42, damping: 0.9), value: controller.banner)
+            .animation(NotchMotion.spring(response: isOpen ? 0.42 : 0.45), value: controller.state)
+            .animation(NotchMotion.hover, value: controller.isHovering)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
@@ -60,6 +61,11 @@ struct NotchContentView: View {
             closedView
         case .picker:
             NotchPickerView(controller: controller)
+                .padding(.horizontal, NotchWindowController.openRadii.top)
+                .padding(.top, controller.notchStripSize.height)
+                .transition(.opacity)
+        case .settings:
+            NotchSettingsView(controller: controller)
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
                 .transition(.opacity)
@@ -113,7 +119,7 @@ struct NotchContentView: View {
                 UnreadBadge(count: sessions.totalUnread, size: 14)
             }
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: sessions.totalUnread)
+        .animation(NotchMotion.spring(response: 0.3, damping: 0.7), value: sessions.totalUnread)
     }
 }
 
@@ -128,9 +134,7 @@ private struct FinishBanner: View {
             if let provider {
                 ProviderGlyph(provider: provider, size: 16)
             } else {
-                Image(systemName: "terminal")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
+                TerminalIcon().frame(width: 16, height: 16)
             }
             Text(provider == nil ? "Comando concluído" : "Resposta pronta")
                 .font(.system(size: 11, weight: .medium))

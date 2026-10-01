@@ -7,6 +7,8 @@ enum NotchState: Equatable {
     case closed
     /// "Active tools" — pick Claude, Codex or the terminal.
     case picker
+    /// Preferences.
+    case settings
     /// 5-hour and weekly usage for one provider.
     case usage(AgentProvider)
     /// `nil` is a clean shell; a provider runs that CLI.
@@ -54,6 +56,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// Content heights below the notch strip; widths include the ears.
     private let pickerSize = CGSize(width: 340, height: 112)
     private let usageSize = CGSize(width: 460, height: 190)
+    private let settingsSize = CGSize(width: 520, height: 290)
     private let terminalSize = CGSize(width: 640, height: 420)
 
     /// Hugs the real notch exactly when there is one — same width and height
@@ -81,6 +84,7 @@ final class NotchWindowController: NSObject, ObservableObject {
             return size
         case .picker: return CGSize(width: pickerSize.width, height: closedSize.height + pickerSize.height)
         case .usage: return CGSize(width: usageSize.width, height: closedSize.height + usageSize.height)
+        case .settings: return CGSize(width: settingsSize.width, height: closedSize.height + settingsSize.height)
         case .terminal: return terminalSize
         }
     }
@@ -144,14 +148,14 @@ final class NotchWindowController: NSObject, ObservableObject {
     func setHovering(_ isInside: Bool) {
         guard isHovering != isInside else { return }
         isHovering = isInside
-        if isInside { playHoverHaptic() }
+        if isInside, AppSettings.shared.hoverHaptic { playHoverHaptic() }
     }
 
     /// The public haptic API only offers three light patterns, so a single tap
     /// is easy to miss. A quick burst of taps reads as one stronger bump.
     private func playHoverHaptic() {
         let performer = NSHapticFeedbackManager.defaultPerformer
-        for i in 0..<5 {
+        for i in 0..<AppSettings.shared.hapticStrength.rawValue {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.03) {
                 performer.perform(.levelChange, performanceTime: .now)
             }
@@ -181,6 +185,11 @@ final class NotchWindowController: NSObject, ObservableObject {
         panel.orderFrontRegardless()
     }
 
+    func showSettings() {
+        panel.orderFrontRegardless()
+        setState(.settings)
+    }
+
     func showPicker() {
         setState(.picker)
     }
@@ -203,12 +212,12 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// Shows the "answer ready" banner for a few seconds, only while closed —
     /// an open panel already has the user's attention.
     private func announce(_ notice: FinishNotice) {
-        guard state == .closed else { return }
+        guard state == .closed, AppSettings.shared.finishBanner else { return }
         bannerDismiss?.cancel()
         banner = notice
         let dismiss = DispatchWorkItem { [weak self] in self?.banner = nil }
         bannerDismiss = dismiss
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5, execute: dismiss)
+        DispatchQueue.main.asyncAfter(deadline: .now() + AppSettings.shared.bannerSeconds, execute: dismiss)
     }
 
     private func setState(_ newState: NotchState) {

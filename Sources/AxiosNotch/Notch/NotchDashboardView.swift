@@ -58,7 +58,7 @@ extension LimitState {
     }
 }
 
-private struct IconButton: View {
+struct IconButton: View {
     let systemName: String
     var tint: Color = .white
     var provider: AgentProvider?

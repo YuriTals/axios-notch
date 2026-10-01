@@ -21,11 +21,7 @@ struct NotchPickerView: View {
                     }
                 }
                 ToolTile(title: "Terminal", tint: .white, provider: nil) {
-                    Image(systemName: "terminal")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(width: 32, height: 32)
-                        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(.white.opacity(0.55), lineWidth: 1.4))
+                    TerminalIcon().frame(width: 32, height: 32)
                 } action: {
                     controller.openTerminal(for: nil)
                 }
@@ -34,6 +30,33 @@ struct NotchPickerView: View {
         .padding(.horizontal, 6)
         .padding(.bottom, 14)
         .padding(.top, 4)
+        // Small and out of the way: the tools are the point. It floats in the
+        // top-right corner, above the Terminal tile, without taking a row.
+        .overlay(alignment: .topTrailing) {
+            GearButton { controller.showSettings() }
+                .padding(.trailing, 8)
+                .padding(.top, 3)
+        }
+    }
+}
+
+/// Small round settings button.
+private struct GearButton: View {
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(.white.opacity(hovering ? 0.95 : 0.6))
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(.white.opacity(hovering ? 0.2 : 0.09)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Ajustes")
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.15), value: hovering)
     }
 }
 
@@ -67,12 +90,13 @@ private struct ToolTile<Glyph: View>: View {
             .overlay(alignment: .topTrailing) {
                 SessionBadge(provider: provider).padding(8)
             }
-            .scaleEffect(hovering ? 1.04 : 1)
+            .scaleEffect(hovering && !AppSettings.shared.reduceMotion ? 1.04 : 1)
             .shadow(color: tint.opacity(hovering ? 0.25 : 0), radius: 10)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
         .onHover { hovering = $0 }
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
+        .animation(NotchMotion.spring(response: 0.3, damping: 0.7), value: hovering)
     }
 }
 
@@ -94,6 +118,7 @@ struct ActiveDot: View {
                     .opacity(pulse ? 0 : 0.8)
             )
             .onAppear {
+                guard !AppSettings.shared.reduceMotion else { return }
                 withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) { pulse = true }
             }
     }
@@ -107,14 +132,17 @@ struct BouncingDots: View {
     var body: some View {
         TimelineView(.animation) { context in
             let t = context.date.timeIntervalSinceReferenceDate
+            let reduced = AppSettings.shared.reduceMotion
             HStack(spacing: dot * 0.6) {
                 ForEach(0..<3, id: \.self) { index in
                     // A short hop, then rest, staggered across the three dots.
+                    // With reduce-motion on they fade in turn instead of hopping.
                     let hop = max(0, sin(t * 7 - Double(index) * 0.8))
                     Circle()
                         .fill(color)
                         .frame(width: dot, height: dot)
-                        .offset(y: -dot * 0.9 * hop)
+                        .opacity(reduced ? 0.35 + 0.65 * hop : 1)
+                        .offset(y: reduced ? 0 : -dot * 0.9 * hop)
                 }
             }
         }
@@ -155,6 +183,6 @@ struct SessionBadge: View {
                 ActiveDot()
             }
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: sessions.unreadCount(provider))
+        .animation(NotchMotion.spring(response: 0.3, damping: 0.7), value: sessions.unreadCount(provider))
     }
 }
