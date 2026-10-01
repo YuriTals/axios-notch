@@ -8,7 +8,6 @@ struct NotchUsageView: View {
     let summary: AgentUsageSummary?
     let limits: LimitState
 
-    @ObservedObject private var sessions = TerminalSessionStore.shared
     private var accent: Color { NotchTheme.accent(for: provider) }
 
     var body: some View {
@@ -40,7 +39,7 @@ struct NotchUsageView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white)
             Spacer()
-            IconButton(systemName: "terminal.fill", tint: accent, isActive: sessions.isActive(provider)) {
+            IconButton(systemName: "terminal.fill", tint: accent, provider: provider, showsBadge: true) {
                 controller.openTerminal(for: provider)
             }
         }
@@ -62,7 +61,8 @@ extension LimitState {
 private struct IconButton: View {
     let systemName: String
     var tint: Color = .white
-    var isActive = false
+    var provider: AgentProvider?
+    var showsBadge = false
     let action: () -> Void
     @State private var hovering = false
 
@@ -74,7 +74,7 @@ private struct IconButton: View {
                 .frame(width: 30, height: 26)
                 .background(Capsule().fill(.white.opacity(hovering ? 0.18 : 0.09)))
                 .overlay(alignment: .topTrailing) {
-                    if isActive { ActiveDot().offset(x: 1, y: -1) }
+                    if showsBadge { SessionBadge(provider: provider).offset(x: 2, y: -3) }
                 }
         }
         .buttonStyle(.plain)

@@ -12,6 +12,7 @@ private let axiosMark: NSImage? = {
 struct NotchContentView: View {
     @ObservedObject var controller: NotchWindowController
     @ObservedObject var usageStore: AgentUsageStore
+    @ObservedObject private var sessions = TerminalSessionStore.shared
 
     private var isOpen: Bool { controller.state != .closed }
 
@@ -89,7 +90,14 @@ struct NotchContentView: View {
             Text("Axios")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.7))
+            // Visible without opening the notch: answering, or answers waiting.
+            if sessions.anyWorking {
+                BouncingDots(dot: 3)
+            } else if sessions.totalUnread > 0 {
+                UnreadBadge(count: sessions.totalUnread, size: 14)
+            }
         }
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: sessions.totalUnread)
         .frame(width: controller.notchStripSize.width, height: controller.notchStripSize.height)
         .contentShape(Rectangle())
         .onTapGesture { controller.toggleExpanded() }

@@ -14,13 +14,13 @@ struct NotchPickerView: View {
 
             HStack(spacing: 10) {
                 ForEach(AgentProvider.allCases) { provider in
-                    ToolTile(title: provider.displayName, tint: NotchTheme.accent(for: provider), isActive: sessions.isActive(provider)) {
+                    ToolTile(title: provider.displayName, tint: NotchTheme.accent(for: provider), provider: provider) {
                         ProviderGlyph(provider: provider, size: 30)
                     } action: {
                         controller.showUsage(for: provider)
                     }
                 }
-                ToolTile(title: "Terminal", tint: .white, isActive: sessions.isActive(nil)) {
+                ToolTile(title: "Terminal", tint: .white, provider: nil) {
                     Image(systemName: "terminal")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(.white)
@@ -40,8 +40,8 @@ struct NotchPickerView: View {
 private struct ToolTile<Glyph: View>: View {
     let title: String
     let tint: Color
-    /// A terminal session is running behind this tile.
-    var isActive = false
+    /// Which terminal session this tile fronts (`nil` is the clean shell).
+    let provider: AgentProvider?
     @ViewBuilder let glyph: () -> Glyph
     let action: () -> Void
     @State private var hovering = false
@@ -65,7 +65,7 @@ private struct ToolTile<Glyph: View>: View {
                     }
             }
             .overlay(alignment: .topTrailing) {
-                if isActive { ActiveDot().padding(9) }
+                SessionBadge(provider: provider).padding(8)
             }
             .scaleEffect(hovering ? 1.04 : 1)
             .shadow(color: tint.opacity(hovering ? 0.25 : 0), radius: 10)
@@ -76,23 +76,85 @@ private struct ToolTile<Glyph: View>: View {
     }
 }
 
+private let activeGreen = Color(red: 0.30, green: 0.85, blue: 0.45)
+private let unreadRed = Color(red: 0.95, green: 0.27, blue: 0.27)
+
 /// Small green dot with a slow pulse: "a session is running here".
 struct ActiveDot: View {
     @State private var pulse = false
 
     var body: some View {
         Circle()
-            .fill(Color(red: 0.30, green: 0.85, blue: 0.45))
+            .fill(activeGreen)
             .frame(width: 7, height: 7)
             .background(
                 Circle()
-                    .fill(Color(red: 0.30, green: 0.85, blue: 0.45).opacity(0.5))
+                    .fill(activeGreen.opacity(0.5))
                     .scaleEffect(pulse ? 2.2 : 1)
                     .opacity(pulse ? 0 : 0.8)
             )
             .onAppear {
                 withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) { pulse = true }
             }
-            .help("Sessão ativa")
+    }
+}
+
+/// Three dots hopping in sequence: "an answer is loading".
+struct BouncingDots: View {
+    var color: Color = activeGreen
+    var dot: CGFloat = 4
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            HStack(spacing: dot * 0.6) {
+                ForEach(0..<3, id: \.self) { index in
+                    // A short hop, then rest, staggered across the three dots.
+                    let hop = max(0, sin(t * 7 - Double(index) * 0.8))
+                    Circle()
+                        .fill(color)
+                        .frame(width: dot, height: dot)
+                        .offset(y: -dot * 0.9 * hop)
+                }
+            }
+        }
+        .padding(.top, dot) // room for the hop so it isn't clipped
+    }
+}
+
+/// Red count of answers that finished while the user was away.
+struct UnreadBadge: View {
+    let count: Int
+    var size: CGFloat = 15
+
+    var body: some View {
+        Text("\(min(count, 99))")
+            .font(.system(size: size * 0.62, weight: .bold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .frame(minWidth: size, minHeight: size)
+            .padding(.horizontal, count > 9 ? 3 : 0)
+            .background(Capsule().fill(unreadRed))
+            .transition(.scale.combined(with: .opacity))
+    }
+}
+
+/// What a terminal session is doing, in order of priority: answering
+/// (bouncing dots) → unseen answers (red count) → merely alive (green dot).
+struct SessionBadge: View {
+    @ObservedObject private var sessions = TerminalSessionStore.shared
+    let provider: AgentProvider?
+
+    var body: some View {
+        Group {
+            if sessions.isWorking(provider) {
+                BouncingDots()
+            } else if sessions.unreadCount(provider) > 0 {
+                UnreadBadge(count: sessions.unreadCount(provider))
+            } else if sessions.isActive(provider) {
+                ActiveDot()
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: sessions.unreadCount(provider))
     }
 }
