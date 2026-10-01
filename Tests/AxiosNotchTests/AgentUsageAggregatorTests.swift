@@ -57,4 +57,41 @@ final class AgentUsageAggregatorTests: XCTestCase {
 
         XCTAssertEqual(breakdown.busiestDay?.day, DayKey(date: busyDay, calendar: calendar))
     }
+
+    func testEventsSharingAnIDReplaceEachOtherInsteadOfAddingUp() {
+        let now = Date()
+        let aggregator = AgentUsageAggregator()
+        for output in [10, 10, 500] {
+            aggregator.ingest(AgentUsageEvent(
+                date: now, model: "claude-sonnet-4", project: "p",
+                tokens: AgentTokens(output: output), id: "msg_1:req_1"
+            ))
+        }
+        aggregator.ingest(AgentUsageEvent(date: now, model: "claude-sonnet-4", project: "p", tokens: AgentTokens(output: 7), id: "msg_2:req_2"))
+
+        XCTAssertEqual(aggregator.snapshot(now: now).todayTokens.output, 507)
+    }
+
+    func testFiveHourBlockIsActiveOnlyWhileInsideItsWindow() {
+        let now = Date()
+        let aggregator = AgentUsageAggregator()
+        aggregator.ingest(AgentUsageEvent(date: now.addingTimeInterval(-3600), model: nil, project: nil, tokens: AgentTokens(output: 100)))
+        aggregator.ingest(AgentUsageEvent(date: now.addingTimeInterval(-60), model: nil, project: nil, tokens: AgentTokens(output: 50)))
+
+        let active = aggregator.snapshot(now: now).fiveHourBlock
+        XCTAssertEqual(active?.tokens.output, 150)
+
+        XCTAssertNil(aggregator.snapshot(now: now.addingTimeInterval(6 * 3600)).fiveHourBlock)
+    }
+
+    func testWeekCoversOnlyTheLastSevenDays() {
+        let now = Date()
+        let aggregator = AgentUsageAggregator()
+        aggregator.ingest(AgentUsageEvent(date: now.addingTimeInterval(-10 * 86_400), model: nil, project: nil, tokens: AgentTokens(output: 999)))
+        aggregator.ingest(AgentUsageEvent(date: now.addingTimeInterval(-2 * 86_400), model: nil, project: nil, tokens: AgentTokens(output: 40)))
+
+        let breakdown = aggregator.snapshot(now: now)
+        XCTAssertEqual(breakdown.week.tokens.output, 40)
+        XCTAssertEqual(breakdown.weekDailyCost.count, 7)
+    }
 }

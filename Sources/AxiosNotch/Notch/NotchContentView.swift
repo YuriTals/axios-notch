@@ -56,8 +56,13 @@ struct NotchContentView: View {
         switch controller.state {
         case .closed:
             closedView
-        case .expanded:
-            NotchDashboardView(controller: controller, usageStore: usageStore)
+        case .picker:
+            NotchPickerView(controller: controller)
+                .padding(.horizontal, NotchWindowController.openRadii.top)
+                .padding(.top, controller.notchStripSize.height)
+                .transition(.opacity)
+        case .usage(let provider):
+            NotchUsageView(controller: controller, provider: provider, summary: usageStore.summaries[provider], limits: usageStore.limits[provider] ?? .loading)
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
                 .transition(.opacity)

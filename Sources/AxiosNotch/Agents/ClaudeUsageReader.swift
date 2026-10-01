@@ -12,7 +12,7 @@ final class ClaudeUsageReader {
 
     /// Per-file running token total, used only for "latest session" — a
     /// separate concern from the aggregator's date/model/project breakdown.
-    private var latestTokensByFile: [URL: AgentTokens] = [:]
+    private var latestTokensByFile: [URL: [String: AgentTokens]] = [:]
 
     init(root: URL = ClaudeUsageReader.defaultRoot, calendar: Calendar = .current) {
         self.root = root
@@ -33,12 +33,13 @@ final class ClaudeUsageReader {
 
         for file in files {
             guard let lines = tailReader.newLines(in: file) else { continue }
-            var sessionTokens = latestTokensByFile[file] ?? AgentTokens()
+            var sessionTokens = latestTokensByFile[file] ?? [:]
             for line in lines {
                 guard let entry = Self.parseAssistantUsage(line) else { continue }
-                sessionTokens += entry.tokens
                 let date = entry.timestamp ?? now
-                aggregator.ingest(AgentUsageEvent(date: date, model: entry.model, project: entry.project, tokens: entry.tokens))
+                aggregator.ingest(AgentUsageEvent(date: date, model: entry.model, project: entry.project, tokens: entry.tokens, id: entry.id))
+                // Entries without an id are never duplicates; give each its own slot.
+                sessionTokens[entry.id ?? UUID().uuidString] = entry.tokens
             }
             latestTokensByFile[file] = sessionTokens
         }
@@ -53,6 +54,9 @@ final class ClaudeUsageReader {
         summary.totalCostInHistory = breakdown.totalCostInHistory
         summary.activeDaysInHistory = breakdown.activeDaysInHistory
         summary.busiestDay = breakdown.busiestDay
+        summary.fiveHourBlock = breakdown.fiveHourBlock
+        summary.week = breakdown.week
+        summary.weekDailyCost = breakdown.weekDailyCost
         summary.latestSessionTokens = mostRecentSessionTokens(among: files)
         summary.lastActivity = aggregator.lastActivity
         return summary
@@ -62,7 +66,7 @@ final class ClaudeUsageReader {
         guard let newest = files.max(by: { modificationDate($0) < modificationDate($1) }) else {
             return AgentTokens()
         }
-        return latestTokensByFile[newest] ?? AgentTokens()
+        return (latestTokensByFile[newest] ?? [:]).values.reduce(AgentTokens(), +)
     }
 
     private func modificationDate(_ url: URL) -> Date {
@@ -89,6 +93,7 @@ final class ClaudeUsageReader {
         let model: String?
         let project: String?
         let timestamp: Date?
+        let id: String?
     }
 
     static func parseAssistantUsage(_ line: Data) -> UsageEntry? {
@@ -108,7 +113,8 @@ final class ClaudeUsageReader {
         let model = message["model"] as? String
         let project = (object["cwd"] as? String).map { URL(fileURLWithPath: $0).lastPathComponent }
         let timestamp = (object["timestamp"] as? String).flatMap(parseTimestamp)
-        return UsageEntry(tokens: tokens, model: model, project: project, timestamp: timestamp)
+        let id = (message["id"] as? String).map { "\($0):\(object["requestId"] as? String ?? "")" }
+        return UsageEntry(tokens: tokens, model: model, project: project, timestamp: timestamp, id: id)
     }
 
     /// Claude Code timestamps are usually ISO-8601 with fractional seconds,

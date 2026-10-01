@@ -1,157 +1,233 @@
 import SwiftUI
 
-/// The compact per-provider summary shown while the notch is expanded —
-/// icon, today's spend, and a tiny hourly sparkline, sized like a landscape
-/// widget card rather than a tall scrolling dashboard.
-struct NotchDashboardView: View {
+/// One provider's usage: the running 5-hour window and the last 7 days,
+/// with a back button and a shortcut into the terminal.
+struct NotchUsageView: View {
     @ObservedObject var controller: NotchWindowController
-    @ObservedObject var usageStore: AgentUsageStore
+    let provider: AgentProvider
+    let summary: AgentUsageSummary?
+    let limits: LimitState
 
-    private var summary: AgentUsageSummary? {
-        usageStore.summaries[controller.selectedProvider]
-    }
+    private var accent: Color { NotchTheme.accent(for: provider) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(spacing: 12) {
             header
-            if let summary, summary.hasAnySession {
-                CompactUsageRow(provider: controller.selectedProvider, summary: summary)
-            } else {
-                emptyState
+            HStack(spacing: 10) {
+                LimitCard(
+                    title: "Janela de 5h", limit: limits.rateLimits?.fiveHour, state: limits, accent: accent,
+                    resetText: { UsageFormat.remaining(until: $0, now: $1) },
+                    footnote: footnote(summary?.fiveHourBlock)
+                )
+                LimitCard(
+                    title: "Semana", limit: limits.rateLimits?.weekly, state: limits, accent: accent,
+                    resetText: { date, _ in UsageFormat.weekday(of: date) },
+                    footnote: footnote(summary?.week)
+                )
             }
         }
-        .padding(14)
+        .padding(.horizontal, 6)
+        .padding(.bottom, 14)
+        .padding(.top, 4)
     }
 
     private var header: some View {
-        HStack {
-            ProviderTabBar(selected: controller.selectedProvider) { controller.selectProvider($0) }
+        HStack(spacing: 10) {
+            IconButton(systemName: "chevron.left") { controller.showPicker() }
+            ProviderGlyph(provider: provider, size: 18)
+            Text(provider.displayName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
             Spacer()
-            Button {
-                controller.openTerminal(for: controller.selectedProvider)
-            } label: {
-                Capsule()
-                    .fill(Color.black)
-                    .frame(width: 30, height: 30)
-                    .overlay {
-                        Image(systemName: "terminal.fill")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.white)
-                    }
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Sem sessão local de \(controller.selectedProvider.displayName)")
-                .foregroundStyle(.white.opacity(0.8))
-                .font(.subheadline)
-            Text("Abra o terminal e rode \(controller.selectedProvider.launchCommand) pra começar.")
-                .foregroundStyle(.white.opacity(0.5))
-                .font(.caption)
-        }
-        .padding(.top, 8)
-    }
-}
-
-private struct ProviderTabBar: View {
-    let selected: AgentProvider
-    let onSelect: (AgentProvider) -> Void
-    @Namespace private var animation
-
-    var body: some View {
-        HStack(spacing: 6) {
-            ForEach(AgentProvider.allCases) { provider in
-                let isSelected = provider == selected
-                Button { onSelect(provider) } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: provider.symbolName)
-                        Text(provider.displayName)
-                    }
-                    .font(.caption.weight(.medium))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background {
-                        if isSelected {
-                            Capsule()
-                                .fill(Color.white.opacity(0.16))
-                                .matchedGeometryEffect(id: "providerTab", in: animation)
-                        }
-                    }
-                    .foregroundStyle(isSelected ? .white : .white.opacity(0.5))
-                }
-                .buttonStyle(.plain)
-                .animation(.smooth(duration: 0.25), value: selected)
+            IconButton(systemName: "terminal.fill", tint: accent) {
+                controller.openTerminal(for: provider)
             }
         }
     }
+
+    private func footnote(_ window: AgentUsageWindow?) -> String? {
+        guard let window, window.tokens.totalTokens > 0 else { return nil }
+        return "\(UsageFormat.tokens(window.tokens.totalTokens)) tokens · \(UsageFormat.cost(window.cost))"
+    }
 }
 
-/// Album-art-style icon on the left, name/cost/sparkline on the right —
-/// the same shape as a landscape media-player widget.
-private struct CompactUsageRow: View {
-    let provider: AgentProvider
-    let summary: AgentUsageSummary
+extension LimitState {
+    var rateLimits: AgentRateLimits? {
+        if case .available(let limits) = self { return limits }
+        return nil
+    }
+}
+
+private struct IconButton: View {
+    let systemName: String
+    var tint: Color = .white
+    let action: () -> Void
+    @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(0.08))
-                .frame(width: 52, height: 52)
-                .overlay {
-                    Image(systemName: provider.symbolName)
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(.white)
-                }
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 26)
+                .background(Capsule().fill(.white.opacity(hovering ? 0.18 : 0.09)))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.15), value: hovering)
+    }
+}
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(provider.displayName)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                    Spacer()
-                    Text(costLabel(summary.estimatedCostToday) ?? "—")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(.white)
-                }
-                Text("\(formattedTokens(summary.todayTokens.totalTokens)) tokens hoje")
-                    .font(.caption2)
-                    .monospacedDigit()
+private struct Card<Content: View>: View {
+    let title: String
+    let trailing: String?
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.white.opacity(0.5))
-                sparkline
+                Spacer()
+                if let trailing {
+                    Text(trailing)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
             }
+            content()
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(NotchTheme.tileFill)
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(NotchTheme.hairline, lineWidth: 1))
         }
     }
+}
 
-    private var sparkline: some View {
-        HStack(alignment: .bottom, spacing: 2) {
-            ForEach(0..<24, id: \.self) { hour in
-                let value = summary.hourlySpendToday[hour]
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(Color.orange.opacity(value > 0 ? 0.85 : 0.15))
-                    .frame(height: barHeight(for: value))
+/// One plan window: the provider's own % used, a bar, and when it resets.
+/// Token and cost totals from the local logs are only a small footnote.
+private struct LimitCard: View {
+    let title: String
+    let limit: AgentLimit?
+    let state: LimitState
+    let accent: Color
+    let resetText: (Date, Date) -> String
+    let footnote: String?
+
+    private func tint(_ percent: Double) -> Color {
+        if percent >= 90 { return Color(red: 0.95, green: 0.33, blue: 0.30) }
+        if percent >= 70 { return Color(red: 0.97, green: 0.68, blue: 0.25) }
+        return accent
+    }
+
+    var body: some View {
+        Card(title: title, trailing: nil) {
+            VStack(alignment: .leading, spacing: 8) {
+                if let limit {
+                    let color = tint(limit.percent)
+                    Text("\(Int(limit.percent.rounded()))%")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .foregroundStyle(.white)
+                    Spacer(minLength: 0)
+                    ProgressBar(progress: min(max(limit.percent / 100, 0), 1), accent: color)
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        Text(limit.resetsAt.map { resetText($0, context.date) } ?? " ")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
+                } else {
+                    Text("—")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.3))
+                    Spacer(minLength: 0)
+                    ProgressBar(progress: 0, accent: accent)
+                    Text(message)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.45))
+                        .lineLimit(2)
+                }
+                if let footnote {
+                    Text(footnote)
+                        .font(.system(size: 10))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.3))
+                }
             }
         }
-        .frame(height: 18, alignment: .bottom)
+        .animation(.smooth, value: limit)
     }
 
-    private func barHeight(for value: Double) -> CGFloat {
-        let maxValue = summary.hourlySpendToday.max() ?? 0
-        guard maxValue > 0 else { return 1.5 }
-        return max(1.5, CGFloat(value / maxValue) * 18)
+    private var message: String {
+        switch state {
+        case .loading: return "Carregando…"
+        case .unavailable(let reason): return reason
+        case .available: return "Sem dados desta janela"
+        }
     }
+}
 
-    private func costLabel(_ value: Double?) -> String? {
-        guard let value else { return nil }
-        return "$\(String(format: "%.2f", value))"
+private struct ProgressBar: View {
+    let progress: Double
+    let accent: Color
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.1))
+                Capsule()
+                    .fill(LinearGradient(colors: [accent.opacity(0.7), accent], startPoint: .leading, endPoint: .trailing))
+                    .frame(width: max(progress > 0 ? 6 : 0, proxy.size.width * progress))
+            }
+        }
+        .frame(height: 6)
     }
+}
 
-    private func formattedTokens(_ value: Int) -> String {
+private struct DayBars: View {
+    let values: [Double]
+    let accent: Color
+    private let height: CGFloat = 22
+
+    var body: some View {
+        let maxValue = values.max() ?? 0
+        HStack(alignment: .bottom, spacing: 4) {
+            ForEach(values.indices, id: \.self) { index in
+                let isToday = index == values.count - 1
+                let fraction = maxValue > 0 ? values[index] / maxValue : 0
+                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                    .fill(values[index] > 0 ? accent.opacity(isToday ? 1 : 0.55) : .white.opacity(0.1))
+                    .frame(height: max(4, height * fraction))
+            }
+        }
+        .frame(height: height, alignment: .bottom)
+    }
+}
+
+enum UsageFormat {
+    static func tokens(_ value: Int) -> String {
+        if value >= 100_000_000 { return String(format: "%.0fM", Double(value) / 1_000_000) }
         if value >= 1_000_000 { return String(format: "%.1fM", Double(value) / 1_000_000) }
         if value >= 1_000 { return String(format: "%.1fk", Double(value) / 1_000) }
         return "\(value)"
+    }
+
+    static func cost(_ value: Double) -> String { String(format: "$%.2f", value) }
+
+    static func weekday(of date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "pt_BR")
+        formatter.setLocalizedDateFormatFromTemplate("EEE HH:mm")
+        return "reinicia \(formatter.string(from: date))"
+    }
+
+    static func remaining(until end: Date, now: Date) -> String {
+        let minutes = max(0, Int(end.timeIntervalSince(now) / 60))
+        return minutes >= 60 ? "reinicia em \(minutes / 60)h \(minutes % 60)min" : "reinicia em \(minutes)min"
     }
 }

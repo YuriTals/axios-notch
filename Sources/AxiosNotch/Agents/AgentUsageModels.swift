@@ -66,6 +66,10 @@ struct AgentUsageEvent {
     let model: String?
     let project: String?
     let tokens: AgentTokens
+    /// Stable identity of the underlying response (`message.id:requestId`).
+    /// Claude Code logs one response several times, once per content block,
+    /// so events sharing an id replace each other instead of adding up.
+    var id: String? = nil
 }
 
 /// A calendar day, used to bucket events without caring about time zones or
@@ -101,6 +105,15 @@ struct AgentNamedSpend: Equatable, Identifiable {
     let cost: Double
 }
 
+/// Tokens and estimated spend over some stretch of time. `start`/`end` are
+/// only set for the 5-hour session block.
+struct AgentUsageWindow: Equatable {
+    var tokens = AgentTokens()
+    var cost: Double = 0
+    var start: Date?
+    var end: Date?
+}
+
 /// What the notch shows for one provider: today's usage plus the richer
 /// breakdown (trend, models, projects, activity history) the dashboard draws.
 struct AgentUsageSummary: Equatable {
@@ -122,4 +135,13 @@ struct AgentUsageSummary: Equatable {
     var totalCostInHistory: Double = 0
     var activeDaysInHistory: Int = 0
     var busiestDay: AgentDailyActivity?
+
+    /// The 5-hour session block that is still running, or nil when the last
+    /// block has already ended. Approximates the CLI's rolling 5h window from
+    /// local logs; it is not the plan's real quota.
+    var fiveHourBlock: AgentUsageWindow?
+    /// Rolling last 7 days.
+    var week = AgentUsageWindow()
+    /// Spend per day for the last 7 days, oldest first, today last.
+    var weekDailyCost: [Double] = Array(repeating: 0, count: 7)
 }

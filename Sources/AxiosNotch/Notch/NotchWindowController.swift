@@ -4,7 +4,10 @@ import SwiftUI
 
 enum NotchState: Equatable {
     case closed
-    case expanded
+    /// "Active tools" — pick Claude, Codex or the terminal.
+    case picker
+    /// 5-hour and weekly usage for one provider.
+    case usage(AgentProvider)
     case terminal(AgentProvider)
 }
 
@@ -22,8 +25,8 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
 /// positioning are handled here; `NotchContentView` only reacts to `state`.
 final class NotchWindowController: NSObject, ObservableObject {
     @Published private(set) var state: NotchState = .closed
-    /// Which provider's dashboard the expanded state is showing.
-    @Published private(set) var selectedProvider: AgentProvider = .claude
+    /// Where the terminal's close button returns to.
+    private var stateBeforeTerminal: NotchState = .picker
 
     private let panel: NotchPanel
     private var geometry: NotchGeometry
@@ -39,8 +42,9 @@ final class NotchWindowController: NSObject, ObservableObject {
     private let hoverGrowth = CGSize(width: 10, height: 5)
     /// Room around the surface for the drop shadow.
     private let shadowInset = CGSize(width: 24, height: 30)
-    /// Landscape, like a widget card — not a tall scrolling panel.
-    private let expandedSize = CGSize(width: 640, height: 170)
+    /// Content heights below the notch strip; widths include the ears.
+    private let pickerSize = CGSize(width: 340, height: 112)
+    private let usageSize = CGSize(width: 460, height: 190)
     private let terminalSize = CGSize(width: 640, height: 420)
 
     /// Hugs the real notch exactly when there is one — same width and height
@@ -62,7 +66,8 @@ final class NotchWindowController: NSObject, ObservableObject {
                 size.height += hoverGrowth.height
             }
             return size
-        case .expanded: return expandedSize
+        case .picker: return CGSize(width: pickerSize.width, height: closedSize.height + pickerSize.height)
+        case .usage: return CGSize(width: usageSize.width, height: closedSize.height + usageSize.height)
         case .terminal: return terminalSize
         }
     }
@@ -116,19 +121,28 @@ final class NotchWindowController: NSObject, ObservableObject {
     }
 
     /// While closed, hovering nudges the capsule a little larger and gives a
-    /// light haptic tap (Force Touch trackpads only) — just enough to say
+    /// haptic tap (Force Touch trackpads only) — just enough to say
     /// "there's something here", without committing to opening it.
     func setHovering(_ isInside: Bool) {
         guard isHovering != isInside else { return }
         isHovering = isInside
-        if isInside, state == .closed {
-            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        if isInside { playHoverHaptic() }
+    }
+
+    /// The public haptic API only offers three light patterns, so a single tap
+    /// is easy to miss. A quick burst of taps reads as one stronger bump.
+    private func playHoverHaptic() {
+        let performer = NSHapticFeedbackManager.defaultPerformer
+        for i in 0..<5 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.03) {
+                performer.perform(.levelChange, performanceTime: .now)
+            }
         }
     }
 
     func toggleExpanded() {
         switch state {
-        case .closed: setState(.expanded)
+        case .closed: setState(.picker)
         default: collapse()
         }
     }
@@ -149,19 +163,26 @@ final class NotchWindowController: NSObject, ObservableObject {
         panel.orderFrontRegardless()
     }
 
-    func selectProvider(_ provider: AgentProvider) {
-        selectedProvider = provider
+    func showPicker() {
+        setState(.picker)
     }
 
+    func showUsage(for provider: AgentProvider) {
+        lastUsedProvider = provider
+        setState(.usage(provider))
+    }
+
+    /// Opens the terminal for `provider`, or for the last-used one (Claude
+    /// by default) when the picker's Terminal tile doesn't name one.
     func openTerminal(for provider: AgentProvider?) {
-        let resolved = provider ?? lastUsedProvider ?? selectedProvider
+        let resolved = provider ?? lastUsedProvider ?? .claude
         lastUsedProvider = resolved
-        selectedProvider = resolved
+        if case .terminal = state {} else { stateBeforeTerminal = state }
         setState(.terminal(resolved))
     }
 
     func closeTerminal() {
-        setState(.expanded)
+        setState(stateBeforeTerminal == .closed ? .picker : stateBeforeTerminal)
     }
 
     private func setState(_ newState: NotchState) {
