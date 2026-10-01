@@ -20,6 +20,7 @@ final class NotchPanel: NSPanel {
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         isFloatingPanel = true
+        isMovable = false
         ignoresMouseEvents = false
         acceptsMouseMovedEvents = true
         // .statusBar sits above ordinary app windows but not necessarily
@@ -27,6 +28,8 @@ final class NotchPanel: NSPanel {
         // drawn by the system at an even higher level) — .screenSaver is
         // high enough to guarantee this panel always wins that fight.
         level = .screenSaver
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        // .ignoresCycle keeps it out of Cmd+` / Mission Control's window list
+        // — it's a notch overlay, not a window the user should "switch to".
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
     }
 }

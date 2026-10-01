@@ -133,6 +133,17 @@ final class NotchWindowController: NSObject, ObservableObject {
         setState(.closed)
     }
 
+    /// Hides the panel entirely — used by the menu bar item's Pause action.
+    /// Collapses first so resuming always starts from the closed capsule.
+    func pause() {
+        setState(.closed)
+        panel.orderOut(nil)
+    }
+
+    func resume() {
+        panel.orderFrontRegardless()
+    }
+
     func selectProvider(_ provider: AgentProvider) {
         selectedProvider = provider
     }
