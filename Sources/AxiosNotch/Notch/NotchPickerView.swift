@@ -3,6 +3,7 @@ import SwiftUI
 /// "Active tools": one large tile each for Claude, Codex and the terminal.
 struct NotchPickerView: View {
     @ObservedObject var controller: NotchWindowController
+    @ObservedObject private var sessions = TerminalSessionStore.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -13,13 +14,13 @@ struct NotchPickerView: View {
 
             HStack(spacing: 10) {
                 ForEach(AgentProvider.allCases) { provider in
-                    ToolTile(title: provider.displayName, tint: NotchTheme.accent(for: provider)) {
+                    ToolTile(title: provider.displayName, tint: NotchTheme.accent(for: provider), isActive: sessions.isActive(provider)) {
                         ProviderGlyph(provider: provider, size: 30)
                     } action: {
                         controller.showUsage(for: provider)
                     }
                 }
-                ToolTile(title: "Terminal", tint: .white) {
+                ToolTile(title: "Terminal", tint: .white, isActive: sessions.isActive(nil)) {
                     Image(systemName: "terminal")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(.white)
@@ -39,6 +40,8 @@ struct NotchPickerView: View {
 private struct ToolTile<Glyph: View>: View {
     let title: String
     let tint: Color
+    /// A terminal session is running behind this tile.
+    var isActive = false
     @ViewBuilder let glyph: () -> Glyph
     let action: () -> Void
     @State private var hovering = false
@@ -61,11 +64,35 @@ private struct ToolTile<Glyph: View>: View {
                             .stroke(hovering ? tint.opacity(0.45) : NotchTheme.hairline, lineWidth: 1)
                     }
             }
+            .overlay(alignment: .topTrailing) {
+                if isActive { ActiveDot().padding(9) }
+            }
             .scaleEffect(hovering ? 1.04 : 1)
             .shadow(color: tint.opacity(hovering ? 0.25 : 0), radius: 10)
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
+    }
+}
+
+/// Small green dot with a slow pulse: "a session is running here".
+struct ActiveDot: View {
+    @State private var pulse = false
+
+    var body: some View {
+        Circle()
+            .fill(Color(red: 0.30, green: 0.85, blue: 0.45))
+            .frame(width: 7, height: 7)
+            .background(
+                Circle()
+                    .fill(Color(red: 0.30, green: 0.85, blue: 0.45).opacity(0.5))
+                    .scaleEffect(pulse ? 2.2 : 1)
+                    .opacity(pulse ? 0 : 0.8)
+            )
+            .onAppear {
+                withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) { pulse = true }
+            }
+            .help("Sessão ativa")
     }
 }
