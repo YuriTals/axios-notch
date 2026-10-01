@@ -59,12 +59,16 @@ final class TerminalSessionStore: ObservableObject {
     private final class Session: LocalProcessTerminalViewDelegate {
         let view = ActivityTerminalView(frame: .zero)
         var tracker: ResponseTracker
+        let mode: ResponseTracker.Mode
         var timer: Timer?
         var onExit: (() -> Void)?
         var onChange: (() -> Void)?
         var onFinished: (() -> Void)?
 
-        init(mode: ResponseTracker.Mode) { tracker = ResponseTracker(mode: mode) }
+        init(mode: ResponseTracker.Mode) {
+            self.mode = mode
+            tracker = ResponseTracker(mode: mode)
+        }
 
         func startPolling() {
             guard timer == nil else { return }
@@ -72,9 +76,10 @@ final class TerminalSessionStore: ObservableObject {
         }
 
         private func poll() {
-            let busy = foregroundBusy()
+            let busy = mode == .foreground ? foregroundBusy() : false
+            let marker = mode == .marker ? screenShowsWorkingMarker() : false
             let wasWorking = tracker.isWorking
-            let event = tracker.tick(now: Date(), foregroundBusy: busy)
+            let event = tracker.tick(now: Date(), foregroundBusy: busy, markerVisible: marker)
             if wasWorking != tracker.isWorking || event != nil { onChange?() }
             if event == .finished { onFinished?() }
             if !tracker.needsPolling { timer?.invalidate(); timer = nil }
@@ -86,6 +91,16 @@ final class TerminalSessionStore: ObservableObject {
             guard let process = view.process, process.running else { return false }
             let group = tcgetpgrp(process.childfd)
             return group > 0 && group != process.shellPid
+        }
+
+        /// Codex prints "esc to interrupt" on screen only while it works.
+        private func screenShowsWorkingMarker() -> Bool {
+            let terminal = view.getTerminal()
+            for row in 0..<terminal.rows {
+                let text = terminal.getLine(row: row)?.translateToString(trimRight: true) ?? ""
+                if text.localizedCaseInsensitiveContains("esc to interrupt") { return true }
+            }
+            return false
         }
 
         func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
@@ -102,7 +117,13 @@ final class TerminalSessionStore: ObservableObject {
         let key = Self.key(for: provider)
         if let existing = sessions[key] { return existing.view }
 
-        let session = Session(mode: provider == nil ? .foreground : .silence)
+        let mode: ResponseTracker.Mode
+        switch provider {
+        case nil: mode = .foreground
+        case .claude: mode = .silence
+        case .codex: mode = .marker
+        }
+        let session = Session(mode: mode)
         session.view.font = TerminalFont.resolve()
         session.view.processDelegate = session
         session.view.onSubmit = { [weak session] in
@@ -137,6 +158,7 @@ final class TerminalSessionStore: ObservableObject {
         }
         let (executable, args) = PTYSession.launchArguments(for: provider)
         session.view.startProcess(executable: executable, args: args)
+        if mode == .marker { session.startPolling() }
         sessions[key] = session
         // Created during a SwiftUI update, so publish on the next turn.
         DispatchQueue.main.async { [weak self] in self?.activeKeys.insert(key) }

@@ -54,4 +54,26 @@ final class ResponseTrackerTests: XCTestCase {
         XCTAssertFalse(tracker.isWorking)
         XCTAssertFalse(tracker.needsPolling)
     }
+
+    func testMarkerModeIgnoresEnterAndOutputAndFollowsTheMarker() {
+        var tracker = ResponseTracker(mode: .marker)
+        // Enter on an idle prompt plus constant redraws must not look like work.
+        tracker.userSubmitted(now: at(0))
+        tracker.outputReceived(now: at(0.1))
+        XCTAssertNil(tracker.tick(now: at(10), markerVisible: false))
+        XCTAssertFalse(tracker.isWorking)
+        XCTAssertTrue(tracker.needsPolling)
+
+        XCTAssertNil(tracker.tick(now: at(11), markerVisible: true))
+        XCTAssertTrue(tracker.isWorking)
+
+        // One frame without the marker is a redraw blink, not the end.
+        XCTAssertNil(tracker.tick(now: at(11.5), markerVisible: false))
+        XCTAssertNil(tracker.tick(now: at(12), markerVisible: true))
+        XCTAssertTrue(tracker.isWorking)
+
+        XCTAssertNil(tracker.tick(now: at(20), markerVisible: false))
+        XCTAssertEqual(tracker.tick(now: at(20.5), markerVisible: false), .finished)
+        XCTAssertFalse(tracker.isWorking)
+    }
 }
