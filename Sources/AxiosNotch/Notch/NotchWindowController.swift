@@ -8,7 +8,8 @@ enum NotchState: Equatable {
     case picker
     /// 5-hour and weekly usage for one provider.
     case usage(AgentProvider)
-    case terminal(AgentProvider)
+    /// `nil` is a clean shell; a provider runs that CLI.
+    case terminal(AgentProvider?)
 }
 
 private final class NotchHostingView<Content: View>: NSHostingView<Content> {
@@ -31,7 +32,6 @@ final class NotchWindowController: NSObject, ObservableObject {
     private let panel: NotchPanel
     private var geometry: NotchGeometry
     private var globalMouseMonitor: Any?
-    private var lastUsedProvider: AgentProvider?
     /// Drives the closed-state hover growth; set from the SwiftUI surface.
     @Published private(set) var isHovering = false
 
@@ -168,17 +168,14 @@ final class NotchWindowController: NSObject, ObservableObject {
     }
 
     func showUsage(for provider: AgentProvider) {
-        lastUsedProvider = provider
         setState(.usage(provider))
     }
 
-    /// Opens the terminal for `provider`, or for the last-used one (Claude
-    /// by default) when the picker's Terminal tile doesn't name one.
+    /// Opens the terminal: running `provider`'s CLI, or a clean shell when
+    /// `provider` is nil.
     func openTerminal(for provider: AgentProvider?) {
-        let resolved = provider ?? lastUsedProvider ?? .claude
-        lastUsedProvider = resolved
         if case .terminal = state {} else { stateBeforeTerminal = state }
-        setState(.terminal(resolved))
+        setState(.terminal(provider))
     }
 
     func closeTerminal() {
