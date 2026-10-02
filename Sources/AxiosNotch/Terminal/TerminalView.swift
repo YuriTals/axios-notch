@@ -99,14 +99,14 @@ private struct SessionTabs: View {
     var body: some View {
         HStack(spacing: 5) {
             // Project folders can change under a shell (`cd`), so refresh the names.
-            TimelineView(.periodic(from: .now, by: 2)) { _ in
+            TimelineView(.periodic(from: .now, by: 2)) { context in
                 HStack(spacing: 5) {
                     ForEach(store.keys(for: provider), id: \.id) { key in
-                        SessionTab(key: key, isSelected: key == store.selectedKey(for: provider))
+                        SessionTab(key: key, isSelected: key == store.selectedKey(for: provider), tick: context.date)
                     }
+                    NewSessionButton(provider: provider, tick: context.date)
                 }
             }
-            NewSessionButton(provider: provider)
         }
     }
 }
@@ -114,6 +114,10 @@ private struct SessionTabs: View {
 private struct SessionTab: View {
     let key: SessionKey
     let isSelected: Bool
+    /// Changes every couple of seconds. The tab's name comes from the shell's
+    /// current folder, which no published value announces; a changing input is
+    /// what makes SwiftUI re-read it (equal inputs would skip the redraw).
+    let tick: Date
     @ObservedObject private var store = TerminalSessionStore.shared
     @State private var hovering = false
 
@@ -156,6 +160,9 @@ private struct SessionTab: View {
 /// a folder you pick.
 private struct NewSessionButton: View {
     let provider: AgentProvider?
+    /// See `SessionTab.tick`: the current folder changes without any published
+    /// value, so a changing input keeps the menu's contents fresh.
+    let tick: Date
     @ObservedObject private var store = TerminalSessionStore.shared
 
     private var atLimit: Bool { store.keys(for: provider).count >= SessionKey.maxPerProvider }
@@ -176,6 +183,18 @@ private struct NewSessionButton: View {
                 }
             }
             Button(tr("Escolher pasta…", "Choose folder…")) { chooseFolder() }
+            let recent = store.recents.suggestions(excluding: Set([currentFolder].compactMap { $0 }))
+            if !recent.isEmpty {
+                Divider()
+                Text(tr("Recentes", "Recent"))
+                ForEach(recent, id: \.self) { path in
+                    Button(ProcessDirectory.projectName(forPath: path) ?? path) {
+                        store.openSession(provider, directory: path)
+                    }
+                }
+                Divider()
+                Button(tr("Limpar recentes", "Clear recents")) { store.clearRecents() }
+            }
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 9, weight: .bold))

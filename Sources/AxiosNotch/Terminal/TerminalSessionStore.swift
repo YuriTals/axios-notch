@@ -56,6 +56,9 @@ final class TerminalSessionStore: ObservableObject {
     /// The most recent unseen finish, for the notch to announce.
     @Published private(set) var lastFinish: NotchNotice?
 
+    /// Folders sessions were used in, for the "+" menu.
+    @Published private(set) var recents = RecentProjects.load()
+
     private var lastPhrase: String?
     /// The tab whose terminal is currently on screen, if any.
     private var visibleKey: SessionKey?
@@ -105,6 +108,7 @@ final class TerminalSessionStore: ObservableObject {
         let number = (existing.map(\.number).max() ?? 0) + 1
         let key = SessionKey(provider: provider, number: number)
 
+        if let directory { remember(directory) }
         let session = makeSession(for: key, directory: directory)
         sessions[key] = session
         keys.append(key)
@@ -125,6 +129,7 @@ final class TerminalSessionStore: ObservableObject {
     /// Ends a tab's process and removes it; its neighbour takes over.
     func close(_ key: SessionKey) {
         guard let session = sessions[key] else { return }
+        if let folder = session.currentDirectory() { remember(folder) }
         session.endProcess()
         remove(key, session: session)
     }
@@ -145,6 +150,21 @@ final class TerminalSessionStore: ObservableObject {
         workingIDs.remove(key.id)
         unread[key.id] = nil
         if visibleKey == key { visibleKey = nil }
+    }
+
+    // MARK: Recent folders
+
+    private func remember(_ path: String) {
+        var updated = recents
+        updated.record(path)
+        guard updated.paths != recents.paths else { return }
+        recents = updated
+        updated.save()
+    }
+
+    func clearRecents() {
+        recents.clear()
+        recents.save()
     }
 
     // MARK: Fonts and visibility
@@ -280,6 +300,7 @@ final class TerminalSessionStore: ObservableObject {
         }
         session.onFinished = { [weak self, weak session] in
             guard let self, self.visibleKey != key else { return }
+            if let folder = session?.currentDirectory() { self.remember(folder) }
             self.unread[key.id, default: 0] += 1
             let phrase = PhraseBook.pick(forShell: key.provider == nil, avoiding: self.lastPhrase)
             self.lastPhrase = phrase
