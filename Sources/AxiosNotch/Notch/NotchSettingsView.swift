@@ -16,8 +16,9 @@ struct NotchSettingsView: View {
                 Spacer()
             }
 
-            HStack(alignment: .top, spacing: 10) {
-                VStack(spacing: 10) {
+            // Two equal rows of two equal cards.
+            VStack(spacing: 10) {
+                HStack(spacing: 10) {
                     SettingsCard(title: "Geral") {
                         Toggle("Iniciar ao fazer login", isOn: $settings.launchAtLogin)
                         if let error = settings.loginError {
@@ -26,17 +27,6 @@ struct NotchSettingsView: View {
                             Caption("Fora de um .app: usa um LaunchAgent deste binário.")
                         }
                     }
-                    SettingsCard(title: "Acessibilidade") {
-                        Text("Reduzir movimento")
-                        Picker("", selection: $settings.motion) {
-                            ForEach(MotionPreference.allCases) { Text($0.label).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        Caption("Troca saltos e molas por transições simples.")
-                    }
-                }
-                VStack(spacing: 10) {
                     SettingsCard(title: "Vibração") {
                         Toggle("Vibrar ao passar o mouse", isOn: $settings.hoverHaptic)
                         Picker("", selection: $settings.hapticStrength) {
@@ -45,6 +35,17 @@ struct NotchSettingsView: View {
                         .pickerStyle(.segmented)
                         .labelsHidden()
                         .disabled(!settings.hoverHaptic)
+                    }
+                }
+                HStack(spacing: 10) {
+                    SettingsCard(title: "Acessibilidade") {
+                        Text("Reduzir movimento")
+                        Picker("", selection: $settings.motion) {
+                            ForEach(MotionPreference.allCases) { Text($0.label).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        Caption("Troca saltos e molas por transições simples.")
                     }
                     SettingsCard(title: "Avisos e terminal") {
                         Toggle("Aviso de resposta pronta", isOn: $settings.finishBanner)
@@ -75,6 +76,12 @@ struct NotchSettingsView: View {
     }
 }
 
+/// Every card shares one size so the grid reads as a clean 2×2.
+enum SettingsLayout {
+    static let cardHeight: CGFloat = 138
+    static let spacing: CGFloat = 10
+}
+
 private struct SettingsCard<Content: View>: View {
     let title: String
     @ViewBuilder let content: () -> Content
@@ -86,8 +93,9 @@ private struct SettingsCard<Content: View>: View {
                 .foregroundStyle(.white.opacity(0.5))
             content()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(12)
+        .frame(height: SettingsLayout.cardHeight)
         .background {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(NotchTheme.tileFill)
