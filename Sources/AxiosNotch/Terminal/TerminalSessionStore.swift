@@ -51,6 +51,8 @@ final class TerminalSessionStore: ObservableObject {
     /// The tab each tool shows when its panel opens, by provider id.
     @Published private(set) var selection: [String: SessionKey] = [:]
     @Published private(set) var workingIDs: Set<String> = []
+    /// Tabs where the tool has stopped to ask for approval.
+    @Published private(set) var waitingIDs: Set<String> = []
     /// Finished answers the user has not seen yet, per tab.
     @Published private(set) var unread: [String: Int] = [:]
     /// The most recent unseen finish, for the notch to announce.
@@ -67,6 +69,9 @@ final class TerminalSessionStore: ObservableObject {
     // MARK: Queries (aggregated per tool — used by tiles and the closed notch)
 
     func keys(for provider: AgentProvider?) -> [SessionKey] { keys.filter { $0.provider == provider } }
+    func isWaiting(_ provider: AgentProvider?) -> Bool { keys.contains { $0.provider == provider && waitingIDs.contains($0.id) } }
+    func isWaiting(_ key: SessionKey) -> Bool { waitingIDs.contains(key.id) }
+    var anyWaiting: Bool { !waitingIDs.isEmpty }
     func isActive(_ provider: AgentProvider?) -> Bool { keys.contains { $0.provider == provider } }
     func isWorking(_ provider: AgentProvider?) -> Bool { keys.contains { $0.provider == provider && workingIDs.contains($0.id) } }
     func unreadCount(_ provider: AgentProvider?) -> Int { keys(for: provider).reduce(0) { $0 + (unread[$1.id] ?? 0) } }
@@ -137,6 +142,7 @@ final class TerminalSessionStore: ObservableObject {
     private func remove(_ key: SessionKey, session: Session) {
         guard sessions[key] === session else { return }
         session.timer?.invalidate()
+        session.attentionTimer?.invalidate()
         session.tracker.reset()
         sessions[key] = nil
         let siblings = keys(for: key.provider)
@@ -148,6 +154,7 @@ final class TerminalSessionStore: ObservableObject {
         }
         keys.removeAll { $0 == key }
         workingIDs.remove(key.id)
+        waitingIDs.remove(key.id)
         unread[key.id] = nil
         if visibleKey == key { visibleKey = nil }
     }
@@ -194,6 +201,10 @@ final class TerminalSessionStore: ObservableObject {
         var tracker: ResponseTracker
         let mode: ResponseTracker.Mode
         var timer: Timer?
+        var attentionTimer: Timer?
+        var isWaiting = false
+        /// Called when the tool starts or stops asking for approval.
+        var onAttention: ((Bool) -> Void)?
         var onExit: (() -> Void)?
         var onChange: (() -> Void)?
         var onFinished: (() -> Void)?
@@ -227,14 +238,28 @@ final class TerminalSessionStore: ObservableObject {
             return group > 0 && group != process.shellPid
         }
 
+        /// The visible screen, one string per row.
+        private func screenLines() -> [String] {
+            let terminal = view.getTerminal()
+            return (0..<terminal.rows).map { terminal.getLine(row: $0)?.translateToString(trimRight: true) ?? "" }
+        }
+
         /// Codex prints "esc to interrupt" on screen only while it works.
         private func screenShowsWorkingMarker() -> Bool {
-            let terminal = view.getTerminal()
-            for row in 0..<terminal.rows {
-                let text = terminal.getLine(row: row)?.translateToString(trimRight: true) ?? ""
-                if text.localizedCaseInsensitiveContains("esc to interrupt") { return true }
+            screenLines().contains { $0.localizedCaseInsensitiveContains("esc to interrupt") }
+        }
+
+        /// Watches for the tool stopping to ask permission. Cheap (one screen
+        /// read a second) and only for Claude/Codex sessions.
+        func startWatchingForApproval() {
+            guard attentionTimer == nil else { return }
+            attentionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                guard let self else { return }
+                let waiting = ApprovalDetector.needsApproval(lines: self.screenLines())
+                guard waiting != self.isWaiting else { return }
+                self.isWaiting = waiting
+                self.onAttention?(waiting)
             }
-            return false
         }
 
         /// Where this session is right now. A shell's own directory is the one
@@ -300,11 +325,28 @@ final class TerminalSessionStore: ObservableObject {
         }
         session.onFinished = { [weak self, weak session] in
             guard let self, self.visibleKey != key else { return }
+            // Stopped to ask the user something: the "!" already says so, and
+            // calling that an "answer ready" would bury it.
+            if session?.isWaiting == true { return }
             if let folder = session?.currentDirectory() { self.remember(folder) }
             self.unread[key.id, default: 0] += 1
             let phrase = PhraseBook.pick(forShell: key.provider == nil, avoiding: self.lastPhrase)
             self.lastPhrase = phrase
             self.lastFinish = NotchNotice(provider: key.provider, project: session?.projectName(), phrase: phrase, sessionID: key.id)
+        }
+        session.onAttention = { [weak self, weak session] waiting in
+            guard let self else { return }
+            if waiting {
+                self.waitingIDs.insert(key.id)
+                // Looking at that tab already: nothing to announce.
+                guard self.visibleKey != key else { return }
+                let phrase = PhraseBook.pickApproval(avoiding: self.lastPhrase)
+                self.lastPhrase = phrase
+                self.lastFinish = NotchNotice(provider: key.provider, project: session?.projectName(), phrase: phrase,
+                                              level: .warning, sessionID: key.id)
+            } else {
+                self.waitingIDs.remove(key.id)
+            }
         }
         session.onExit = { [weak self, weak session] in
             guard let self, let session else { return }
@@ -314,6 +356,7 @@ final class TerminalSessionStore: ObservableObject {
         // Start in the home folder unless told otherwise: a packaged .app inherits "/".
         session.view.startProcess(executable: executable, args: args, currentDirectory: directory ?? NSHomeDirectory())
         if mode == .marker { session.startPolling() }
+        if key.provider != nil { session.startWatchingForApproval() }
         return session
     }
 }

@@ -34,6 +34,21 @@ enum PhraseBook {
         }
     }
 
+    /// When Claude or Codex is stopped, waiting for the user to approve something.
+    static func approval(_ lang: Lang) -> [String] {
+        switch lang {
+        case .pt: return ["Preciso da sua aprovação!", "Posso continuar? Vem ver!", "Estou esperando você aqui!"]
+        case .en: return ["I need your approval!", "May I continue? Come see!", "Waiting for you here!"]
+        }
+    }
+
+    /// Picks a line for an approval request.
+    static func pickApproval(avoiding previous: String?, language: Lang = Localization.current,
+                             randomIndex: (Int) -> Int = { Int.random(in: 0..<$0) }) -> String {
+        let options = approval(language).filter { $0 != previous }
+        return options[randomIndex(options.count)]
+    }
+
     /// Picks a line, never the one used last time (when there is a choice).
     static func pick(forShell: Bool, avoiding previous: String?, language: Lang = Localization.current,
                      randomIndex: (Int) -> Int = { Int.random(in: 0..<$0) }) -> String {

@@ -124,7 +124,9 @@ struct NotchContentView: View {
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.7))
             // Visible without opening the notch: answering, or answers waiting.
-            if sessions.anyWorking {
+            if sessions.anyWaiting {
+                WaitingBadge(size: 14)
+            } else if sessions.anyWorking {
                 BouncingDots(dot: 3)
             } else if sessions.totalUnread > 0 {
                 UnreadBadge(count: sessions.totalUnread, size: 14)

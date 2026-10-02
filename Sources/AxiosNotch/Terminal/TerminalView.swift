@@ -127,7 +127,9 @@ private struct SessionTab: View {
                 .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
                 .lineLimit(1)
                 .frame(maxWidth: 110)
-            if store.isWorking(key) {
+            if store.isWaiting(key) {
+                WaitingBadge(size: 12)
+            } else if store.isWorking(key) {
                 BouncingDots(dot: 2.5)
             } else if store.unreadCount(key) > 0 {
                 UnreadBadge(count: store.unreadCount(key), size: 12)

@@ -150,6 +150,26 @@ struct BouncingDots: View {
     }
 }
 
+/// "!" in an amber disc: the tool stopped and needs the user.
+struct WaitingBadge: View {
+    var size: CGFloat = 15
+    @State private var pulse = false
+
+    var body: some View {
+        Text("!")
+            .font(.system(size: size * 0.7, weight: .heavy, design: .rounded))
+            .foregroundStyle(.black.opacity(0.85))
+            .frame(width: size, height: size)
+            .background(Circle().fill(Color(red: 0.97, green: 0.68, blue: 0.25)))
+            .scaleEffect(pulse ? 1.12 : 1)
+            .onAppear {
+                guard !AppSettings.shared.reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) { pulse = true }
+            }
+            .accessibilityLabel(tr("Aguardando aprovação", "Waiting for approval"))
+    }
+}
+
 /// Red count of answers that finished while the user was away.
 struct UnreadBadge: View {
     let count: Int
@@ -175,7 +195,9 @@ struct SessionBadge: View {
 
     var body: some View {
         Group {
-            if sessions.isWorking(provider) {
+            if sessions.isWaiting(provider) {
+                WaitingBadge()
+            } else if sessions.isWorking(provider) {
                 BouncingDots()
             } else if sessions.unreadCount(provider) > 0 {
                 UnreadBadge(count: sessions.unreadCount(provider))
