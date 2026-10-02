@@ -68,7 +68,7 @@ como instalá-lo e continua com um shell.
 ### Ajustes
 Engrenagem no seletor, ou "Ajustes…" no menu da barra.
 
-- **Geral:** iniciar ao fazer login, reabrir abas, idioma (Sistema, Português, English).
+- **Geral:** iniciar ao fazer login, reabrir abas, idioma (Sistema, Português, English) e **Enviar feedback**: abre o seu app de e-mail com uma mensagem pronta para o desenvolvedor, com versões, preferências e o estado das ferramentas. Nunca vão tokens, conversas, pastas nem os comandos das suas ferramentas; você vê tudo antes de enviar.
 - **Experiência:** cor de destaque, tema e fonte do terminal, vibração e sua força, reduzir
   movimento, som e duração do aviso.
 - **Ferramentas:** as suas ferramentas extras.

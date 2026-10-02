@@ -33,6 +33,8 @@ struct NotchSettingsView: View {
     /// The scroll position is tracked by the pages' own ids (the strings the
     /// `ForEach` gives them); an explicit `.id` of another type would never match.
     @State private var pageID: SettingsPage.ID? = SettingsPage.general.id
+    @ObservedObject var usageStore: AgentUsageStore
+    @State private var feedbackNote: String?
     @State private var newToolName = ""
     @State private var newToolCommand = ""
     private var page: SettingsPage { SettingsPage.allCases.first { $0.id == pageID } ?? .general }
@@ -170,6 +172,27 @@ struct NotchSettingsView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
             }
+            SettingsCard(title: tr("Feedback", "Feedback")) {
+                Caption(tr("Abre seu app de e-mail com uma mensagem pronta e dados técnicos: versões, preferências e estado. Nunca tokens, conversas ou pastas.", "Opens your mail app with a ready message and technical details: versions, preferences and status. Never tokens, conversations or folders."))
+                Button(action: sendFeedback) {
+                    Text(tr("Enviar feedback", "Send feedback")).frame(maxWidth: .infinity)
+                }
+                if let feedbackNote { Caption(feedbackNote) }
+            }
+        }
+    }
+
+    private func sendFeedback() {
+        let snapshot = FeedbackReport.snapshot(settings: settings, usage: usageStore, sessions: TerminalSessionStore.shared)
+        let intro = tr("Escreva aqui seu comentário, sugestão ou problema:", "Write your comment, suggestion or problem here:")
+        let body = FeedbackReport.body(snapshot, intro: intro)
+        let subject = "Axios Notch \(snapshot.version) · feedback"
+        if let url = FeedbackReport.mailtoURL(subject: subject, body: body), NSWorkspace.shared.open(url) {
+            feedbackNote = nil
+        } else {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(body, forType: .string)
+            feedbackNote = tr("Nenhum app de e-mail encontrado. O relatório foi copiado; envie para \(FeedbackReport.recipient).", "No mail app found. The report was copied; send it to \(FeedbackReport.recipient).")
         }
     }
 
