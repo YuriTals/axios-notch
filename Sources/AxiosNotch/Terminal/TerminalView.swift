@@ -78,7 +78,7 @@ enum FontChoice: String, CaseIterable, Identifiable {
         families.contains(where: FontRegistry.bundledFamilies.contains)
     }
 
-    static func available(families: [String] = NSFontManager.shared.availableFontFamilies) -> [FontChoice] {
+    static func available(families: [String] = FontRegistry.availableFamilies()) -> [FontChoice] {
         allCases.filter { $0.isAvailable(in: families) }
     }
 }
@@ -91,7 +91,7 @@ enum TerminalFont {
     static let nerdPreferred = ["FiraCode Nerd Font Mono", "JetBrainsMono Nerd Font Mono", "MesloLGS Nerd Font Mono", "Hack Nerd Font Mono"]
 
     static func resolve(choice: FontChoice = AppSettings.shared.terminalFont, size: CGFloat = TerminalFont.size,
-                        families: [String] = NSFontManager.shared.availableFontFamilies) -> NSFont {
+                        families: [String] = FontRegistry.availableFamilies()) -> NSFont {
         let nerd = nerdFamily(in: families)
 
         if choice == .auto {
@@ -149,6 +149,7 @@ struct TerminalPanelView: View {
                 }
                 SessionTabs(provider: provider)
                 Spacer(minLength: 4)
+                CopyAnswerButton(provider: provider)
                 OpenFolderButton(provider: provider)
                 Button(action: onClose) {
                     Image(systemName: "xmark.circle.fill")
@@ -169,6 +170,40 @@ struct TerminalPanelView: View {
         // Last tab ended (`exit`, or closed with ×): nothing left to show.
         .onChange(of: selected) { _, newValue in
             if newValue == nil { onClose() }
+        }
+    }
+}
+
+/// Copies the output since the last Enter to the clipboard, and says so by
+/// turning into a checkmark for a moment.
+private struct CopyAnswerButton: View {
+    let provider: AgentProvider?
+    @ObservedObject private var store = TerminalSessionStore.shared
+    @State private var copied = false
+    @State private var nothing = false
+
+    var body: some View {
+        Button(action: copy) {
+            Image(systemName: copied ? "checkmark" : (nothing ? "exclamationmark" : "doc.on.doc"))
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(copied ? Color(red: 0.30, green: 0.85, blue: 0.45) : .white.opacity(nothing ? 0.35 : 0.7))
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(.white.opacity(0.08)))
+        }
+        .buttonStyle(.plain)
+        .help(tr("Copiar a última resposta", "Copy the last answer"))
+        .accessibilityLabel(tr("Copiar a última resposta", "Copy the last answer"))
+    }
+
+    private func copy() {
+        if let key = store.selectedKey(for: provider), let text = store.lastAnswer(for: key) {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            copied = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+        } else {
+            nothing = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { nothing = false }
         }
     }
 }

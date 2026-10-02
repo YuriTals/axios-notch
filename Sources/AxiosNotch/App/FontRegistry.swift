@@ -1,3 +1,4 @@
+import AppKit
 import CoreText
 import Foundation
 
@@ -22,6 +23,13 @@ enum FontRegistry {
     static func fontFiles(in directory: URL, fileManager: FileManager = .default) -> [URL] {
         let files = (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         return files.filter { ["ttf", "otf"].contains($0.pathExtension.lowercased()) }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    /// Every font family available right now. Asked of CoreText, which reflects
+    /// fonts registered a moment ago; `NSFontManager.availableFontFamilies` can
+    /// serve a list cached before they were.
+    static func availableFamilies() -> [String] {
+        (CTFontManagerCopyAvailableFontFamilyNames() as? [String]) ?? NSFontManager.shared.availableFontFamilies
     }
 
     /// The family names the bundled files provide.

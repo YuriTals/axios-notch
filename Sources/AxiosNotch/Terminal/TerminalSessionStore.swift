@@ -159,6 +159,28 @@ final class TerminalSessionStore: ObservableObject {
         if visibleKey == key { visibleKey = nil }
     }
 
+    // MARK: Last answer
+
+    /// The output since the tab's last Enter, or nil if nothing was submitted yet
+    /// or nothing came back.
+    func lastAnswer(for key: SessionKey) -> String? {
+        guard let session = sessions[key] else { return nil }
+        let buffer = session.bufferText()
+        let text: String
+        if key.provider == nil {
+            // A plain shell scrolls: everything after the last Enter is the output.
+            guard let marker = session.lastSubmitMarker else { return nil }
+            text = AnswerExtractor.answer(in: buffer, since: marker, dropsPrompt: true, columns: session.columns)
+        } else {
+            // Claude/Codex redraw in place; find their last reply by its structure.
+            text = AnswerExtractor.cliAnswer(in: buffer, fixedBox: key.provider == .codex, columns: session.columns)
+        }
+        return text.isEmpty ? nil : text
+    }
+
+    /// Whether there is something to copy (cheap enough for a button's state).
+    func hasAnswer(for key: SessionKey) -> Bool { lastAnswer(for: key) != nil }
+
     // MARK: Recent folders
 
     private func remember(_ path: String) {
@@ -208,6 +230,8 @@ final class TerminalSessionStore: ObservableObject {
         let mode: ResponseTracker.Mode
         var timer: Timer?
         var attentionTimer: Timer?
+        /// Buffer line count when the user last pressed Enter (see `AnswerExtractor`).
+        var lastSubmitMarker: Int?
         var isWaiting = false
         /// Called when the tool starts or stops asking for approval.
         var onAttention: ((Bool) -> Void)?
@@ -242,6 +266,14 @@ final class TerminalSessionStore: ObservableObject {
             guard let process = view.process, process.running else { return false }
             let group = tcgetpgrp(process.childfd)
             return group > 0 && group != process.shellPid
+        }
+
+        /// The whole buffer (scrollback and screen) as text.
+        /// The terminal's width in columns.
+        var columns: Int { view.getTerminal().cols }
+
+        func bufferText() -> String {
+            String(data: view.getTerminal().getBufferAsData(), encoding: .utf8) ?? ""
         }
 
         /// The visible screen, one string per row.
@@ -317,6 +349,7 @@ final class TerminalSessionStore: ObservableObject {
         session.view.processDelegate = session
         session.view.onSubmit = { [weak session] in
             guard let session else { return }
+            session.lastSubmitMarker = AnswerExtractor.lineCount(of: session.bufferText())
             session.tracker.userSubmitted(now: Date())
             session.startPolling()
         }

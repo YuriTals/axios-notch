@@ -33,7 +33,7 @@ final class FontChoiceTests: XCTestCase {
     }
 
     func testPlainFontsGetANerdFallbackForPromptIcons() {
-        let families = NSFontManager.shared.availableFontFamilies
+        let families = FontRegistry.availableFamilies()
         guard families.contains(where: { $0.localizedCaseInsensitiveContains("Nerd Font") }) else { return }   // none installed here
         let menlo = TerminalFont.resolve(choice: .menlo, size: 13)
         let cascade = menlo.fontDescriptor.object(forKey: .cascadeList) as? [NSFontDescriptor]
@@ -69,7 +69,7 @@ final class BundledFontsTests: XCTestCase {
         XCTAssertEqual(FontRegistry.registerBundledFonts(), 12)
         XCTAssertEqual(FontRegistry.registerBundledFonts(), 12)             // calling again is harmless
 
-        let families = NSFontManager.shared.availableFontFamilies
+        let families = FontRegistry.availableFamilies()
         for family in FontRegistry.bundledFamilies { XCTAssertTrue(families.contains(family), "\(family) not registered") }
 
         for choice in [FontChoice.jetbrains, .firaCode, .sourceCode, .hack, .cascadia, .plex, .auto] {
