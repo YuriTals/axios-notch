@@ -60,7 +60,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     private let pickerSize = CGSize(width: 340, height: 112)
     private let usageSize = CGSize(width: 460, height: 278)
     // header (26) + gap (12) + two cards + gap + bottom padding
-    private let settingsSize = CGSize(width: 520, height: 26 + 12 + SettingsLayout.cardHeight * 2 + SettingsLayout.spacing + 18)
+    private let settingsSize = CGSize(width: 560, height: 26 + 12 + SettingsLayout.cardHeight * 2 + SettingsLayout.spacing + 18)
     private let terminalSize = CGSize(width: 640, height: 420)
 
     /// Hugs the real notch exactly when there is one — same width and height
