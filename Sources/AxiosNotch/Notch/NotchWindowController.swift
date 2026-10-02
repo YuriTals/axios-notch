@@ -69,8 +69,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// The visible notch surface for the current state. SwiftUI animates this
     /// with a spring; the window itself stays at `windowSize`.
     var surfaceSize: CGSize {
-        switch state {
-        case .closed:
+        if state == .closed {
             // The body hugs the notch; the ears add `top` radius on each side.
             var size = CGSize(width: closedSize.width + Self.closedRadii.top * 2, height: closedSize.height)
             if isHovering {
@@ -82,6 +81,17 @@ final class NotchWindowController: NSObject, ObservableObject {
                 size.width = max(size.width, Self.bannerMinWidth)
             }
             return size
+        }
+        return openSize(for: state)
+    }
+
+    /// The final size of an open state. Its content is laid out at exactly
+    /// this size from the first frame and merely revealed by the growing
+    /// surface; letting content follow the animated frame made tiles squeeze
+    /// and the terminal reflow (and resize its PTY) on every frame.
+    func openSize(for state: NotchState) -> CGSize {
+        switch state {
+        case .closed: return surfaceSize
         case .picker: return CGSize(width: pickerSize.width, height: closedSize.height + pickerSize.height)
         case .usage: return CGSize(width: usageSize.width, height: closedSize.height + usageSize.height)
         case .settings: return CGSize(width: settingsSize.width, height: closedSize.height + settingsSize.height)
@@ -89,11 +99,17 @@ final class NotchWindowController: NSObject, ObservableObject {
         }
     }
 
-    /// Fixed and large enough for the biggest state plus shadow, so state
-    /// changes never have to animate the NSWindow frame.
+    /// Fixed and large enough for the biggest state plus its shadow. The
+    /// window is never resized when the notch opens or closes: resizing it
+    /// made the content ride the moving bottom edge for a frame (a visible
+    /// hop). Instead the window ignores the mouse everywhere except over the
+    /// surface, so its transparent area never swallows clicks.
     private var windowSize: CGSize {
         CGSize(width: terminalSize.width + shadowInset.width * 2, height: terminalSize.height + shadowInset.height)
     }
+
+    private var localMouseMonitor: Any?
+    private var moveMonitors: [Any] = []
 
     /// The width/height every state's window shares at its very top edge —
     /// deliberately never wider than the physical notch (or the fallback
@@ -115,11 +131,32 @@ final class NotchWindowController: NSObject, ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] notice in self?.announce(notice) }
 
-        applyFrame()
+        setWindowFrame()
+        updateMousePassthrough()
         panel.orderFrontRegardless()
 
         globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            self?.collapse()
+            self?.handleClickOutsideWindow()
+        }
+        // Follow the mouse so the window only takes events while it is over the
+        // surface; everywhere else clicks fall through to the apps below (and
+        // reach the global monitor above, which closes the notch).
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved], handler: { [weak self] _ in self?.updateMousePassthrough() }) {
+            moveMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved], handler: { [weak self] event in
+            self?.updateMousePassthrough()
+            return event
+        }) {
+            moveMonitors.append(local)
+        }
+        // Clicks on the panel's own transparent margin (the shadow ring) land
+        // in our window, so the global monitor never sees them.
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            if let self, event.window === self.panel, self.isOutsideSurface(event.locationInWindow) {
+                self.collapse()
+            }
+            return event
         }
 
         NotificationCenter.default.addObserver(
@@ -134,12 +171,17 @@ final class NotchWindowController: NSObject, ObservableObject {
         if let globalMouseMonitor {
             NSEvent.removeMonitor(globalMouseMonitor)
         }
+        if let localMouseMonitor {
+            NSEvent.removeMonitor(localMouseMonitor)
+        }
+        moveMonitors.forEach { NSEvent.removeMonitor($0) }
         NotificationCenter.default.removeObserver(self)
     }
 
     @objc private func screenParametersChanged() {
         geometry = NotchGeometry.current()
-        applyFrame()
+        setWindowFrame()
+        updateMousePassthrough()
     }
 
     /// While closed, hovering nudges the capsule a little larger and gives a
@@ -215,7 +257,11 @@ final class NotchWindowController: NSObject, ObservableObject {
         guard state == .closed, AppSettings.shared.finishBanner else { return }
         bannerDismiss?.cancel()
         banner = notice
-        let dismiss = DispatchWorkItem { [weak self] in self?.banner = nil }
+        updateMousePassthrough()
+        let dismiss = DispatchWorkItem { [weak self] in
+            self?.banner = nil
+            self?.updateMousePassthrough()
+        }
         bannerDismiss = dismiss
         DispatchQueue.main.asyncAfter(deadline: .now() + AppSettings.shared.bannerSeconds, execute: dismiss)
     }
@@ -227,19 +273,58 @@ final class NotchWindowController: NSObject, ObservableObject {
             banner = nil
         }
         state = newState
+        updateMousePassthrough()
         if case .terminal = state {
             panel.makeKeyAndOrderFront(nil)
         }
     }
 
-    private func applyFrame() {
+    /// A click that reached another app. Usually that means "click outside to
+    /// close", but if the pointer jumped onto the surface without a move event
+    /// (so the window was still ignoring the mouse) treat it as a click on it.
+    private func handleClickOutsideWindow() {
+        if surfaceArea.contains(NSEvent.mouseLocation) {
+            updateMousePassthrough()
+            if state == .closed { toggleExpanded() }
+        } else {
+            collapse()
+        }
+    }
+
+    /// Screen-space rectangle of the surface, with a little slack.
+    private var surfaceArea: CGRect {
+        let surface = surfaceSize
+        let slack: CGFloat = 8
+        return CGRect(
+            x: geometry.frame.midX - surface.width / 2 - slack,
+            y: geometry.frame.maxY - surface.height - slack,
+            width: surface.width + slack * 2,
+            height: surface.height + slack * 2
+        )
+    }
+
+    private func setWindowFrame() {
         let size = windowSize
-        let frame = CGRect(
+        panel.setFrame(CGRect(
             x: geometry.frame.midX - size.width / 2,
             y: geometry.frame.maxY - size.height,
             width: size.width,
             height: size.height
-        )
-        panel.setFrame(frame, display: true)
+        ), display: true)
+    }
+
+    /// The window takes mouse events only while the pointer is over the
+    /// surface (with a few points of slack for the hover growth and shadow).
+    private func updateMousePassthrough() {
+        let inside = surfaceArea.contains(NSEvent.mouseLocation)
+        if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
+    }
+
+    /// Is a click (in window coordinates) outside the visible surface?
+    private func isOutsideSurface(_ point: CGPoint) -> Bool {
+        let window = panel.frame.size
+        let surface = surfaceSize
+        let left = (window.width - surface.width) / 2
+        return point.x < left || point.x > left + surface.width || point.y < window.height - surface.height
     }
 }

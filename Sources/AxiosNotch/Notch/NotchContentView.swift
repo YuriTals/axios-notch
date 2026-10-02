@@ -63,21 +63,29 @@ struct NotchContentView: View {
             NotchPickerView(controller: controller)
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
+                .frame(width: controller.openSize(for: controller.state).width,
+                       height: controller.openSize(for: controller.state).height, alignment: .top)
                 .transition(.opacity)
         case .settings:
             NotchSettingsView(controller: controller)
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
+                .frame(width: controller.openSize(for: controller.state).width,
+                       height: controller.openSize(for: controller.state).height, alignment: .top)
                 .transition(.opacity)
         case .usage(let provider):
             NotchUsageView(controller: controller, provider: provider, summary: usageStore.summaries[provider], limits: usageStore.limits[provider] ?? .loading)
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
+                .frame(width: controller.openSize(for: controller.state).width,
+                       height: controller.openSize(for: controller.state).height, alignment: .top)
                 .transition(.opacity)
         case .terminal(let provider):
             TerminalPanelView(provider: provider, onClose: { controller.closeTerminal() })
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
+                .frame(width: controller.openSize(for: controller.state).width,
+                       height: controller.openSize(for: controller.state).height, alignment: .top)
                 .transition(.opacity)
         }
     }
