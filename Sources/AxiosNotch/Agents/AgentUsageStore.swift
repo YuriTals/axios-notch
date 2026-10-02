@@ -20,6 +20,9 @@ final class AgentUsageStore: ObservableObject {
     private let limitsInterval: TimeInterval = 120
     private var backoff: [AgentProvider: LimitBackoff] = [:]
     private var alertTracker = LimitAlertTracker()
+    private var forecaster = LimitForecaster()
+    /// "At this pace…" projections, keyed `provider.window` (see `forecast(for:window:)`).
+    @Published private(set) var forecasts: [String: LimitForecast] = [:]
     /// Fires when a limit crosses 80 %/90 % or a high window starts over.
     let alerts = PassthroughSubject<LimitAlert, Never>()
 
@@ -64,10 +67,19 @@ final class AgentUsageStore: ObservableObject {
 
     /// Asks each provider for its real plan usage. A failed fetch keeps the
     /// last good numbers on screen unless there never were any.
-    private func checkAlerts(for provider: AgentProvider, limits: AgentRateLimits) {
+    /// What to do with a fresh reading of a provider's limits: feed the
+    /// forecaster, publish its projection, and raise any 80 %/90 % alert.
+    func process(limits: AgentRateLimits, for provider: AgentProvider, now: Date = Date()) {
         let windows: [(LimitWindow, AgentLimit?)] = [(.fiveHour, limits.fiveHour), (.weekly, limits.weekly)]
         for (window, limit) in windows {
             guard let limit else { continue }
+            forecaster.record(provider: provider, window: window, limit: limit, now: now)
+            let key = "\(provider.rawValue).\(window.rawValue)"
+            if let forecast = forecaster.forecast(provider: provider, window: window, limit: limit, now: now), forecast.beforeReset {
+                forecasts[key] = forecast
+            } else {
+                forecasts[key] = nil
+            }
             if let alert = alertTracker.observe(provider: provider, window: window, limit: limit) {
                 alerts.send(alert)
             }
@@ -89,7 +101,7 @@ final class AgentUsageStore: ObservableObject {
                         policy.succeeded(now: Date(), interval: self.limitsInterval)
                         if case .available(let limits) = result.state {
                             LimitCache.save(limits, for: provider)
-                            self.checkAlerts(for: provider, limits: limits)
+                            self.process(limits: limits, for: provider)
                         }
                         self.limits[provider] = result.state
                     } else {

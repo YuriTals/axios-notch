@@ -74,7 +74,7 @@ struct NotchContentView: View {
                        height: controller.openSize(for: controller.state).height, alignment: .top)
                 .transition(.opacity)
         case .usage(let provider):
-            NotchUsageView(controller: controller, provider: provider, summary: usageStore.summaries[provider], limits: usageStore.limits[provider] ?? .loading)
+            NotchUsageView(controller: controller, provider: provider, summary: usageStore.summaries[provider], limits: usageStore.limits[provider] ?? .loading, forecasts: usageStore.forecasts)
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
                 .frame(width: controller.openSize(for: controller.state).width,

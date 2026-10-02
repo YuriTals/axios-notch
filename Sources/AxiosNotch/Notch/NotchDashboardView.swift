@@ -7,6 +7,8 @@ struct NotchUsageView: View {
     let provider: AgentProvider
     let summary: AgentUsageSummary?
     let limits: LimitState
+    /// Projections from `AgentUsageStore.forecasts`, keyed `provider.window`.
+    let forecasts: [String: LimitForecast]
 
     private var accent: Color { NotchTheme.accent(for: provider) }
 
@@ -17,12 +19,14 @@ struct NotchUsageView: View {
                 LimitCard(
                     title: tr("Janela de 5h", "5h window"), limit: limits.rateLimits?.fiveHour, state: limits, accent: accent,
                     resetText: { UsageFormat.remaining(until: $0, now: $1) },
-                    footnote: footnote(summary?.fiveHourBlock)
+                    footnote: footnote(summary?.fiveHourBlock),
+                    forecast: forecasts["\(provider.rawValue).\(LimitWindow.fiveHour.rawValue)"]
                 )
                 LimitCard(
                     title: tr("Semana", "Week"), limit: limits.rateLimits?.weekly, state: limits, accent: accent,
                     resetText: { date, _ in UsageFormat.weekday(of: date) },
-                    footnote: footnote(summary?.week)
+                    footnote: footnote(summary?.week),
+                    forecast: forecasts["\(provider.rawValue).\(LimitWindow.weekly.rawValue)"]
                 )
             }
             ModelUsageSection(
@@ -127,6 +131,8 @@ private struct LimitCard: View {
     let accent: Color
     let resetText: (Date, Date) -> String
     let footnote: String?
+    /// When present, replaces the tokens/cost footnote with the projection.
+    var forecast: LimitForecast? = nil
 
     private func tint(_ percent: Double) -> Color {
         if percent >= 90 { return Color(red: 0.95, green: 0.33, blue: 0.30) }
@@ -162,7 +168,13 @@ private struct LimitCard: View {
                         .foregroundStyle(.white.opacity(0.45))
                         .lineLimit(2)
                 }
-                if let footnote {
+                if let forecast, limit != nil {
+                    Text(UsageFormat.forecastText(forecast.secondsToFull))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color(red: 0.97, green: 0.68, blue: 0.25))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                } else if let footnote {
                     Text(footnote)
                         .font(.system(size: 10))
                         .monospacedDigit()
@@ -333,6 +345,26 @@ enum UsageFormat {
         return minutes >= 60
             ? tr(" · há \(minutes / 60) h", " · \(minutes / 60) h ago")
             : tr(" · há \(minutes) min", " · \(minutes) min ago")
+    }
+
+    /// "no ritmo atual, acaba em ~40 min". Rounds to 5 minutes (a projection is
+    /// never that exact) and to half hours beyond the first couple of hours.
+    static func forecastText(_ seconds: TimeInterval) -> String {
+        let minutes = max(1, Int((seconds / 60).rounded()))
+        let amount: String
+        if minutes < 10 {
+            amount = "\(minutes) min"
+        } else if minutes < 60 {
+            amount = "\(Int((Double(minutes) / 5).rounded()) * 5) min"
+        } else if minutes < 6 * 60 {
+            let rounded = Int((Double(minutes) / 5).rounded()) * 5
+            amount = rounded % 60 == 0 ? "\(rounded / 60) h" : "\(rounded / 60) h \(rounded % 60) min"
+        } else if minutes < 48 * 60 {
+            amount = "\(Int((Double(minutes) / 60).rounded())) h"
+        } else {
+            amount = tr("\(Int((Double(minutes) / 1440).rounded())) dias", "\(Int((Double(minutes) / 1440).rounded())) days")
+        }
+        return tr("no ritmo atual, acaba em ~\(amount)", "at this pace, runs out in ~\(amount)")
     }
 
     static func weekday(of date: Date) -> String {
