@@ -7,6 +7,13 @@ final class NotchPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    /// The everyday level, above even the menu bar's own separator.
+    static let restingLevel = NSWindow.Level.screenSaver
+    /// While a file is being dragged to the notch. macOS does not offer windows
+    /// at or above its dragging layer (500) as drop targets, so the panel has to
+    /// come down below it — still above the menu bar (24).
+    static let dropLevel = NSWindow.Level.popUpMenu
+
     convenience init(contentRect: CGRect) {
         self.init(
             contentRect: contentRect,
@@ -27,7 +34,7 @@ final class NotchPanel: NSPanel {
         // above the real menu bar's own chrome (it has a separator/shadow
         // drawn by the system at an even higher level) — .screenSaver is
         // high enough to guarantee this panel always wins that fight.
-        level = .screenSaver
+        level = Self.restingLevel
         // .ignoresCycle keeps it out of Cmd+` / Mission Control's window list
         // — it's a notch overlay, not a window the user should "switch to".
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]

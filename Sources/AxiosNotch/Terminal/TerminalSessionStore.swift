@@ -16,6 +16,82 @@ final class ActivityTerminalView: LocalProcessTerminalView {
         super.dataReceived(slice: slice)
         onOutput?()
     }
+
+    // MARK: Clipboard
+
+    /// The app has no Edit menu, which SwiftTerm relies on to turn ⌘V and ⌘C
+    /// into paste and copy, so they do nothing unless handled here.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .numericPad, .function])
+        guard modifiers == .command, let key = event.charactersIgnoringModifiers?.lowercased() else {
+            return super.performKeyEquivalent(with: event)
+        }
+        switch key {
+        case "v":
+            paste(self)
+            return true
+        case "c":
+            if selectionActive, !(getSelection() ?? "").isEmpty { copy(self); return true }
+            return false                                        // nothing selected: leave ⌘C alone
+        case "a":
+            selectAll(self)
+            return true
+        default:
+            return super.performKeyEquivalent(with: event)
+        }
+    }
+
+    /// Text pastes as usual; a copied file pastes its path and a copied image
+    /// is saved as a PNG and pastes that path, which is how Claude Code and
+    /// Codex take attachments in a terminal.
+    override func paste(_ sender: Any) {
+        switch PasteResolver.resolve(.general) {
+        case .text:
+            super.paste(sender)
+        case .files(let urls):
+            pastePaths(urls.map(\.path))
+        case .image(let png):
+            if let url = PastedImages.save(png) { pastePaths([url.path]) } else { NSSound.beep() }
+        }
+    }
+
+    /// Pastes paths as one bracketed paste, so a tool sees them as a paste (and
+    /// can recognise an image) rather than as typing.
+    func pastePaths(_ paths: [String]) {
+        guard !paths.isEmpty else { return }
+        let text = ShellPath.joined(paths)
+        if getTerminal().bracketedPasteMode {
+            send(data: [0x1b, 0x5b, 0x32, 0x30, 0x30, 0x7e][...])      // ESC [ 200 ~
+            send(txt: text)
+            send(data: [0x1b, 0x5b, 0x32, 0x30, 0x31, 0x7e][...])      // ESC [ 201 ~
+        } else {
+            send(txt: text)
+        }
+    }
+
+    // MARK: Drag and drop
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        registerForDraggedTypes([.fileURL])
+    }
+
+    private func droppedFiles(_ sender: NSDraggingInfo) -> [URL] {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        return (sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL]) ?? []
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        droppedFiles(sender).isEmpty ? [] : .copy
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let files = droppedFiles(sender)
+        guard !files.isEmpty else { return false }
+        pastePaths(files.map(\.path))
+        window?.makeFirstResponder(self)
+        return true
+    }
 }
 
 /// Identifies one terminal tab: which tool it runs (`nil` is the clean shell)
@@ -158,6 +234,34 @@ final class TerminalSessionStore: ObservableObject {
         waitingIDs.remove(key.id)
         unread[key.id] = nil
         if visibleKey == key { visibleKey = nil }
+    }
+
+    // MARK: Adding files to a chat
+
+    /// Pastes `paths` into the tool's input. A tool that was only just started is
+    /// not listening yet, so wait (up to `timeout`) until its prompt is on screen.
+    func attach(paths: [String], to provider: AgentProvider?, timeout: TimeInterval = 20) {
+        let key = ensureSelected(provider)
+        guard let session = sessions[key] else { return }
+        let deadline = Date().addingTimeInterval(timeout)
+        var readySince: Date?
+
+        func attempt() {
+            guard sessions[key] === session else { return }                 // the tab was closed meanwhile
+            if session.isReadyForInput {
+                // Ready only just now: give the program a beat to finish setting up its
+                // paste handling, so the path is recognised as an attachment.
+                let since = readySince ?? Date()
+                readySince = since
+                let settled = key.provider == nil || Date().timeIntervalSince(since) >= 0.7
+                if settled { session.view.pastePaths(paths); return }
+            } else {
+                readySince = nil
+            }
+            if Date() >= deadline { session.view.pastePaths(paths); return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { attempt() }
+        }
+        attempt()
     }
 
     // MARK: Last answer
@@ -313,6 +417,22 @@ final class TerminalSessionStore: ObservableObject {
         }
 
         /// The whole buffer (scrollback and screen) as text.
+        let startedAt = Date()
+
+        /// Whether the process is listening. A paste only counts as a paste (and
+        /// so only turns a path into an attached image) once the program has
+        /// switched on bracketed-paste mode, which Claude and Codex do a moment
+        /// *after* their input box first appears; pasting before that is just
+        /// typing. So: the mode is on, and for Claude/Codex the box is on screen.
+        var isReadyForInput: Bool {
+            guard view.getTerminal().bracketedPasteMode else { return false }
+            if key.provider == nil { return true }
+            return screenLines().contains { line in
+                guard let first = line.trimmingCharacters(in: .whitespaces).first else { return false }
+                return first == "❯" || first == "›"
+            }
+        }
+
         /// The terminal's width in columns.
         var columns: Int { view.getTerminal().cols }
 

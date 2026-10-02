@@ -7,6 +7,8 @@ enum NotchState: Equatable {
     case closed
     /// "Active tools" — pick Claude, Codex or the terminal.
     case picker
+    /// A file is being dragged to the notch: pick the chat to add it to.
+    case drop
     /// Preferences.
     case settings
     /// 5-hour and weekly usage for one provider.
@@ -96,7 +98,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     func openSize(for state: NotchState) -> CGSize {
         switch state {
         case .closed: return surfaceSize
-        case .picker: return CGSize(width: pickerSize.width, height: closedSize.height + pickerSize.height)
+        case .picker, .drop: return CGSize(width: pickerSize.width, height: closedSize.height + pickerSize.height)
         case .usage: return CGSize(width: usageSize.width, height: closedSize.height + usageSize.height)
         case .settings: return CGSize(width: settingsSize.width, height: closedSize.height + settingsSize.height)
         case .terminal: return terminalSize
@@ -160,6 +162,14 @@ final class NotchWindowController: NSObject, ObservableObject {
             return event
         }) {
             moveMonitors.append(local)
+        }
+        // Files being dragged toward the notch (the events come from whichever app
+        // started the drag, so only the global monitor sees them).
+        if let drag = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDragged], handler: { [weak self] _ in self?.handleFileDrag() }) {
+            moveMonitors.append(drag)
+        }
+        if let release = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp], handler: { [weak self] _ in self?.fileDragEnded() }) {
+            moveMonitors.append(release)
         }
         // Clicks on the panel's own transparent margin (the shadow ring) land
         // in our window, so the global monitor never sees them.
@@ -256,6 +266,52 @@ final class NotchWindowController: NSObject, ObservableObject {
         }
     }
 
+    // MARK: Dragging files to the notch
+
+    private var dragCheckedChange = -1
+    private var dragIsFiles = false
+
+    /// Called on every drag movement anywhere on screen.
+    private func handleFileDrag() {
+        let drag = NSPasteboard(name: .drag)
+        // Reading the pasteboard on every movement is wasteful; do it once per drag.
+        if drag.changeCount != dragCheckedChange {
+            dragCheckedChange = drag.changeCount
+            dragIsFiles = !FileDrag.fileURLs(in: drag).isEmpty
+        }
+        let action = FileDragRules.action(
+            isFileDrag: dragIsFiles, pointer: NSEvent.mouseLocation, notch: geometry.frame,
+            openSurface: state == .drop ? surfaceRect(slack: 0) : nil,
+            isDropOpen: state == .drop, isIdle: state == .closed)
+        switch action {
+        case .open:
+            panel.orderFrontRegardless()
+            setState(.drop)
+            updateMousePassthrough()
+        case .close:
+            setState(.closed)
+        case .none:
+            if state == .drop { updateMousePassthrough() }     // the window must accept the drop while the pointer is on it
+        }
+    }
+
+    /// The mouse button was released somewhere. If nothing took the drop, close.
+    private func fileDragEnded() {
+        dragIsFiles = false
+        guard state == .drop else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self, self.state == .drop else { return }
+            self.setState(.closed)
+        }
+    }
+
+    /// Files were dropped on a tool: open its chat and add them.
+    func attach(_ urls: [URL], to provider: AgentProvider?) {
+        guard !urls.isEmpty else { return }
+        openTerminal(for: provider)
+        TerminalSessionStore.shared.attach(paths: urls.map(\.path), to: provider)
+    }
+
     func showPicker() {
         setState(.picker)
     }
@@ -302,6 +358,8 @@ final class NotchWindowController: NSObject, ObservableObject {
             banner = nil
         }
         state = newState
+        // Dropping needs a lower window level; everything else wants the high one.
+        panel.level = newState == .drop ? NotchPanel.dropLevel : NotchPanel.restingLevel
         updateMousePassthrough()
         if case .terminal = state {
             panel.makeKeyAndOrderFront(nil)

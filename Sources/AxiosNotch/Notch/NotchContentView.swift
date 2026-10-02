@@ -66,6 +66,13 @@ struct NotchContentView: View {
                 .frame(width: controller.openSize(for: controller.state).width,
                        height: controller.openSize(for: controller.state).height, alignment: .top)
                 .transition(.opacity)
+        case .drop:
+            NotchDropView(controller: controller)
+                .padding(.horizontal, NotchWindowController.openRadii.top)
+                .padding(.top, controller.notchStripSize.height)
+                .frame(width: controller.openSize(for: controller.state).width,
+                       height: controller.openSize(for: controller.state).height, alignment: .top)
+                .transition(.opacity)
         case .settings:
             NotchSettingsView(controller: controller)
                 .padding(.horizontal, NotchWindowController.openRadii.top)
