@@ -94,18 +94,30 @@ final class ActivityTerminalView: LocalProcessTerminalView {
     }
 }
 
-/// Identifies one terminal tab: which tool it runs (`nil` is the clean shell)
-/// and its number among that tool's tabs (1, 2, 3…; numbers are not reused
-/// while a higher one is open, so a tab's name never changes under you).
+/// Identifies one terminal tab: which tool it runs and its number among that
+/// tool's tabs (1, 2, 3…; numbers are not reused while a higher one is open, so
+/// a tab's name never changes under you).
 struct SessionKey: Hashable {
-    let provider: AgentProvider?
+    let tool: Tool
     let number: Int
 
-    var providerID: String { provider?.rawValue ?? "shell" }
+    init(tool: Tool, number: Int) {
+        self.tool = tool
+        self.number = number
+    }
+
+    /// Claude/Codex tabs, and the plain shell (`nil`).
+    init(provider: AgentProvider?, number: Int) {
+        self.init(tool: provider.map(Tool.agent) ?? .shell, number: number)
+    }
+
+    /// The agent this tab runs, when it is Claude or Codex.
+    var provider: AgentProvider? { tool.agent }
+    var providerID: String { tool.id }
     var id: String { "\(providerID)#\(number)" }
 
     /// "Claude 2", "Terminal 1".
-    var fallbackTitle: String { "\(provider?.displayName ?? "Terminal") \(number)" }
+    var fallbackTitle: String { "\(tool.displayName()) \(number)" }
 
     static let maxPerProvider = 6
 }
@@ -145,19 +157,19 @@ final class TerminalSessionStore: ObservableObject {
 
     // MARK: Queries (aggregated per tool — used by tiles and the closed notch)
 
-    func keys(for provider: AgentProvider?) -> [SessionKey] { keys.filter { $0.provider == provider } }
-    func isWaiting(_ provider: AgentProvider?) -> Bool { keys.contains { $0.provider == provider && waitingIDs.contains($0.id) } }
+    func keys(for tool: Tool) -> [SessionKey] { keys.filter { $0.tool == tool } }
+    func isWaiting(_ tool: Tool) -> Bool { keys.contains { $0.tool == tool && waitingIDs.contains($0.id) } }
     func isWaiting(_ key: SessionKey) -> Bool { waitingIDs.contains(key.id) }
     var anyWaiting: Bool { !waitingIDs.isEmpty }
-    func isActive(_ provider: AgentProvider?) -> Bool { keys.contains { $0.provider == provider } }
-    func isWorking(_ provider: AgentProvider?) -> Bool { keys.contains { $0.provider == provider && workingIDs.contains($0.id) } }
-    func unreadCount(_ provider: AgentProvider?) -> Int { keys(for: provider).reduce(0) { $0 + (unread[$1.id] ?? 0) } }
+    func isActive(_ tool: Tool) -> Bool { keys.contains { $0.tool == tool } }
+    func isWorking(_ tool: Tool) -> Bool { keys.contains { $0.tool == tool && workingIDs.contains($0.id) } }
+    func unreadCount(_ tool: Tool) -> Int { keys(for: tool).reduce(0) { $0 + (unread[$1.id] ?? 0) } }
     var anyWorking: Bool { !workingIDs.isEmpty }
     var totalUnread: Int { unread.values.reduce(0, +) }
 
     // MARK: Queries (per tab)
 
-    func selectedKey(for provider: AgentProvider?) -> SessionKey? { selection[provider?.rawValue ?? "shell"] }
+    func selectedKey(for tool: Tool) -> SessionKey? { selection[tool.id] }
     func isWorking(_ key: SessionKey) -> Bool { workingIDs.contains(key.id) }
     func unreadCount(_ key: SessionKey) -> Int { unread[key.id] ?? 0 }
 
@@ -172,23 +184,23 @@ final class TerminalSessionStore: ObservableObject {
     /// the tool has none yet. Call this *before* showing the panel, never from
     /// inside a view update.
     @discardableResult
-    func ensureSelected(_ provider: AgentProvider?) -> SessionKey {
-        if let key = selectedKey(for: provider), sessions[key] != nil { return key }
-        if let first = keys(for: provider).first {
+    func ensureSelected(_ tool: Tool) -> SessionKey {
+        if let key = selectedKey(for: tool), sessions[key] != nil { return key }
+        if let first = keys(for: tool).first {
             selection[first.providerID] = first
             return first
         }
-        return openSession(provider, directory: nil)
+        return openSession(tool, directory: nil)
     }
 
     /// Opens another tab for `provider` and selects it. At the per-tool limit it
     /// just returns the selected tab.
     @discardableResult
-    func openSession(_ provider: AgentProvider?, directory: String?) -> SessionKey {
-        let existing = keys(for: provider)
-        if existing.count >= SessionKey.maxPerProvider { return ensureSelected(provider) }
+    func openSession(_ tool: Tool, directory: String?) -> SessionKey {
+        let existing = keys(for: tool)
+        if existing.count >= SessionKey.maxPerProvider { return ensureSelected(tool) }
         let number = (existing.map(\.number).max() ?? 0) + 1
-        let key = SessionKey(provider: provider, number: number)
+        let key = SessionKey(tool: tool, number: number)
 
         if let directory { remember(directory) }
         let session = makeSession(for: key, directory: directory)
@@ -222,7 +234,7 @@ final class TerminalSessionStore: ObservableObject {
         session.attentionTimer?.invalidate()
         session.tracker.reset()
         sessions[key] = nil
-        let siblings = keys(for: key.provider)
+        let siblings = keys(for: key.tool)
         if let index = siblings.firstIndex(of: key) {
             let remaining = siblings.filter { $0 != key }
             if selection[key.providerID] == key {
@@ -240,8 +252,8 @@ final class TerminalSessionStore: ObservableObject {
 
     /// Pastes `paths` into the tool's input. A tool that was only just started is
     /// not listening yet, so wait (up to `timeout`) until its prompt is on screen.
-    func attach(paths: [String], to provider: AgentProvider?, timeout: TimeInterval = 20) {
-        let key = ensureSelected(provider)
+    func attach(paths: [String], to tool: Tool, timeout: TimeInterval = 20) {
+        let key = ensureSelected(tool)
         guard let session = sessions[key] else { return }
         let deadline = Date().addingTimeInterval(timeout)
         var readySince: Date?
@@ -253,7 +265,7 @@ final class TerminalSessionStore: ObservableObject {
                 // paste handling, so the path is recognised as an attachment.
                 let since = readySince ?? Date()
                 readySince = since
-                let settled = key.provider == nil || Date().timeIntervalSince(since) >= 0.7
+                let settled = key.tool.isShell || Date().timeIntervalSince(since) >= 0.7
                 if settled { session.view.pastePaths(paths); return }
             } else {
                 readySince = nil
@@ -272,7 +284,8 @@ final class TerminalSessionStore: ObservableObject {
         guard let session = sessions[key] else { return nil }
         let buffer = session.bufferText()
         let text: String
-        if key.provider == nil {
+        if key.tool.isCustom { return nil }                             // an unknown TUI: no reliable way to tell its answer apart
+        if key.tool.isShell {
             // A plain shell scrolls: everything after the last Enter is the output.
             guard let marker = session.lastSubmitMarker else { return nil }
             text = AnswerExtractor.answer(in: buffer, since: marker, dropsPrompt: true, columns: session.columns)
@@ -291,9 +304,9 @@ final class TerminalSessionStore: ObservableObject {
     /// The open tabs and their folders, for the next launch.
     func snapshot() -> SavedTabs {
         SavedTabs(tabs: keys.map { key in
-            SavedTab(provider: key.provider?.rawValue,
+            SavedTab(provider: key.tool.isShell ? nil : key.tool.id,
                      directory: currentDirectory(for: key),
-                     wasSelected: selectedKey(for: key.provider) == key)
+                     wasSelected: selectedKey(for: key.tool) == key)
         })
     }
 
@@ -309,8 +322,8 @@ final class TerminalSessionStore: ObservableObject {
         var restored = 0
         var selected: [SessionKey] = []
         for tab in saved.restorable() {
-            let provider = tab.provider.flatMap(AgentProvider.init(rawValue:))
-            let key = openSession(provider, directory: tab.directory)
+            let tool = tab.provider.flatMap(Tool.init(id:)) ?? .shell
+            let key = openSession(tool, directory: tab.directory)
             restored += 1
             if tab.wasSelected { selected.append(key) }
         }
@@ -426,7 +439,9 @@ final class TerminalSessionStore: ObservableObject {
         /// typing. So: the mode is on, and for Claude/Codex the box is on screen.
         var isReadyForInput: Bool {
             guard view.getTerminal().bracketedPasteMode else { return false }
-            if key.provider == nil { return true }
+            if key.tool.isShell { return true }
+            // A tool we know nothing about: no prompt glyph to look for, so give it a beat.
+            if key.tool.isCustom { return Date().timeIntervalSince(startedAt) > 1.5 }
             return screenLines().contains { line in
                 guard let first = line.trimmingCharacters(in: .whitespaces).first else { return false }
                 return first == "❯" || first == "›"
@@ -502,10 +517,10 @@ final class TerminalSessionStore: ObservableObject {
 
     private func makeSession(for key: SessionKey, directory: String?) -> Session {
         let mode: ResponseTracker.Mode
-        switch key.provider {
-        case nil: mode = .foreground
-        case .claude: mode = .silence
-        case .codex: mode = .marker
+        switch key.tool {
+        case .shell: mode = .foreground
+        case .agent(.claude), .custom: mode = .silence
+        case .agent(.codex): mode = .marker
         }
         let session = Session(key: key, mode: mode)
         session.view.font = TerminalFont.resolve()
@@ -534,9 +549,9 @@ final class TerminalSessionStore: ObservableObject {
             if session?.isWaiting == true { return }
             if let folder = session?.currentDirectory() { self.remember(folder) }
             self.unread[key.id, default: 0] += 1
-            let phrase = PhraseBook.pick(forShell: key.provider == nil, avoiding: self.lastPhrase)
+            let phrase = PhraseBook.pick(forShell: key.tool.isShell, avoiding: self.lastPhrase)
             self.lastPhrase = phrase
-            self.lastFinish = NotchNotice(provider: key.provider, project: session?.projectName(), phrase: phrase, sessionID: key.id)
+            self.lastFinish = NotchNotice(tool: key.tool, project: session?.projectName(), phrase: phrase, sessionID: key.id)
             NoticeSound.playIfEnabled()
         }
         session.onAttention = { [weak self, weak session] waiting in
@@ -547,7 +562,7 @@ final class TerminalSessionStore: ObservableObject {
                 guard self.visibleKey != key else { return }
                 let phrase = PhraseBook.pickApproval(avoiding: self.lastPhrase)
                 self.lastPhrase = phrase
-                self.lastFinish = NotchNotice(provider: key.provider, project: session?.projectName(), phrase: phrase,
+                self.lastFinish = NotchNotice(tool: key.tool, project: session?.projectName(), phrase: phrase,
                                               level: .warning, sessionID: key.id)
                 NoticeSound.playIfEnabled()
             } else {
@@ -558,11 +573,11 @@ final class TerminalSessionStore: ObservableObject {
             guard let self, let session else { return }
             self.remove(key, session: session)
         }
-        let (executable, args) = PTYSession.launchArguments(for: key.provider)
+        let (executable, args) = PTYSession.launchArguments(for: key.tool)
         // Start in the home folder unless told otherwise: a packaged .app inherits "/".
         session.view.startProcess(executable: executable, args: args, currentDirectory: directory ?? NSHomeDirectory())
         if mode == .marker { session.startPolling() }
-        if key.provider != nil { session.startWatchingForApproval() }
+        if key.tool.agent != nil { session.startWatchingForApproval() }          // permission prompts are Claude/Codex
         return session
     }
 }

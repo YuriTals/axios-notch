@@ -34,7 +34,7 @@ final class AnswerExtractorTests: XCTestCase {
     func testCopiesTheRealOutputOfACommandInARealShell() throws {
         let store = TerminalSessionStore()
         defer { for key in store.keys { store.close(key) } }
-        let key = store.ensureSelected(nil)
+        let key = store.ensureSelected(.shell)
         let view = try XCTUnwrap(store.view(for: key))
         XCTAssertNil(store.lastAnswer(for: key))                          // nothing submitted yet
 

@@ -5,7 +5,7 @@ import SwiftUI
 /// them with snap (trackpad / wheel) and a rail of icons on the right to jump,
 /// like the iOS 26 Control Center.
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, appearance
+    case general, appearance, tools
 
     var id: String { rawValue }
 
@@ -13,6 +13,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .general: return "gearshape.fill"
         case .appearance: return "paintpalette.fill"
+        case .tools: return "wrench.and.screwdriver.fill"
         }
     }
 
@@ -20,6 +21,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .general: return tr("Ajustes", "Settings")
         case .appearance: return tr("Aparência", "Appearance")
+        case .tools: return tr("Ferramentas", "Tools")
         }
     }
 }
@@ -85,6 +87,7 @@ struct NotchSettingsView: View {
         switch page {
         case .general: generalPage
         case .appearance: appearancePage
+        case .tools: ToolsPage()
         }
     }
 
@@ -339,5 +342,82 @@ private struct AppBadge: View {
         .foregroundStyle(.white.opacity(0.45))
         .padding(.trailing, 6)
         .accessibilityElement(children: .combine)
+    }
+}
+
+
+/// Register commands to run in the notch next to Claude and Codex (Antigravity,
+/// Aider…). They get a tile in the picker and in the drop strip, and their own tabs.
+struct ToolsPage: View {
+    @ObservedObject private var settings = AppSettings.shared
+    @State private var name = ""
+    @State private var command = ""
+
+    private var canAdd: Bool {
+        settings.customTools.count < CustomTool.maxCount && CustomTool(name: name, command: command).isValid
+    }
+
+    var body: some View {
+        CardGridLayout {
+            SettingsCard(title: tr("Minhas ferramentas", "My tools")) {
+                if settings.customTools.isEmpty {
+                    Caption(tr("Nenhuma ainda. Cadastre um comando ao lado ou use uma sugestão.", "None yet. Register a command, or pick a suggestion."))
+                } else {
+                    ForEach(settings.customTools) { tool in
+                        HStack(spacing: 7) {
+                            ToolGlyph(tool: .custom(tool.id), size: 16)
+                            Text(tool.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
+                            Text(tool.command)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.4))
+                                .lineLimit(1).truncationMode(.tail)
+                            Spacer(minLength: 2)
+                            Button { settings.removeCustomTool(id: tool.id) } label: {
+                                Image(systemName: "minus.circle.fill").foregroundStyle(.white.opacity(0.45))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(tr("Remover \(tool.name)", "Remove \(tool.name)"))
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+                Caption(tr("\(settings.customTools.count) de \(CustomTool.maxCount)", "\(settings.customTools.count) of \(CustomTool.maxCount)"))
+            }
+            SettingsCard(title: tr("Adicionar", "Add")) {
+                TextField(tr("Nome (ex.: Aider)", "Name (e.g. Aider)"), text: $name)
+                    .textFieldStyle(.roundedBorder)
+                TextField(tr("Comando (ex.: aider)", "Command (e.g. aider)"), text: $command)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(add)
+                Button(action: add) {
+                    Text(tr("Adicionar", "Add")).frame(maxWidth: .infinity)
+                }
+                .disabled(!canAdd)
+            }
+            SettingsCard(title: tr("Sugestões", "Suggestions")) {
+                ForEach(CustomTool.presets, id: \.name) { preset in
+                    let added = settings.customTools.contains { $0.name.lowercased() == preset.name.lowercased() }
+                    Button {
+                        settings.addCustomTool(name: preset.name, command: preset.command)
+                    } label: {
+                        HStack {
+                            Text(preset.name)
+                            Spacer()
+                            Image(systemName: added ? "checkmark" : "plus").font(.system(size: 10, weight: .bold))
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(added || settings.customTools.count >= CustomTool.maxCount)
+                    .opacity(added ? 0.45 : 1)
+                }
+            }
+        }
+    }
+
+    private func add() {
+        guard canAdd, settings.addCustomTool(name: name, command: command) else { return }
+        name = ""
+        command = ""
     }
 }

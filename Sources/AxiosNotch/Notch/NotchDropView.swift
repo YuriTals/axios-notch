@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 /// tool's chat.
 struct NotchDropView: View {
     @ObservedObject var controller: NotchWindowController
+    @ObservedObject private var settings = AppSettings.shared
 
     /// Folders start a session in them; anything else is added to the chat.
     private var title: String {
@@ -25,14 +26,11 @@ struct NotchDropView: View {
                 .padding(.leading, 4)
 
             HStack(spacing: 10) {
-                ForEach(AgentProvider.allCases) { provider in
-                    DropTile(title: provider.displayName, tint: NotchTheme.accent(for: provider)) {
-                        ProviderGlyph(provider: provider, size: 30)
-                    } onDrop: { urls in controller.attach(urls, to: provider) }
+                ForEach(Tool.all(customTools: settings.customTools), id: \.id) { tool in
+                    DropTile(title: tool.displayName(customTools: settings.customTools), tint: NotchTheme.accent(for: tool)) {
+                        ToolGlyph(tool: tool, size: 30)
+                    } onDrop: { urls in controller.attach(urls, to: tool) }
                 }
-                DropTile(title: "Terminal", tint: NotchTheme.appAccent) {
-                    TerminalIcon().frame(width: 32, height: 32)
-                } onDrop: { urls in controller.attach(urls, to: nil) }
             }
         }
         .padding(.horizontal, 6)

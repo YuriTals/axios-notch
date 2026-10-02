@@ -48,8 +48,8 @@ struct NotchUsageView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white)
             Spacer()
-            IconButton(systemName: "terminal.fill", tint: accent, provider: provider, showsBadge: true) {
-                controller.openTerminal(for: provider)
+            IconButton(systemName: "terminal.fill", tint: accent, tool: .agent(provider), showsBadge: true) {
+                controller.openTerminal(for: .agent(provider))
             }
         }
     }
@@ -70,7 +70,7 @@ extension LimitState {
 struct IconButton: View {
     let systemName: String
     var tint: Color = .white
-    var provider: AgentProvider?
+    var tool: Tool = .shell
     var showsBadge = false
     let action: () -> Void
     @State private var hovering = false
@@ -83,7 +83,7 @@ struct IconButton: View {
                 .frame(width: 30, height: 26)
                 .background(Capsule().fill(.white.opacity(hovering ? 0.18 : 0.09)))
                 .overlay(alignment: .topTrailing) {
-                    if showsBadge { SessionBadge(provider: provider).offset(x: 2, y: -3) }
+                    if showsBadge { SessionBadge(tool: tool).offset(x: 2, y: -3) }
                 }
         }
         .buttonStyle(.plain)

@@ -27,12 +27,21 @@ struct SavedTabs: Codable, Equatable {
     /// longer exists falls back to the home folder (nil), and unknown tools
     /// (a future version's, or junk) are skipped.
     func restorable(perTool: Int = SessionKey.maxPerProvider,
+                    customToolIDs: Set<String> = Set(AppSettings.shared.customTools.map(\.id)),
                     folderExists: (String) -> Bool = { var isDir: ObjCBool = false
                         return FileManager.default.fileExists(atPath: $0, isDirectory: &isDir) && isDir.boolValue }) -> [SavedTab] {
         var counts: [String: Int] = [:]
         var result: [SavedTab] = []
-        for tab in tabs {
-            if let name = tab.provider, AgentProvider(rawValue: name) == nil { continue }
+        for var tab in tabs {
+            // A tab saved by a version that shipped Gemini reopens as Antigravity.
+            if let name = tab.provider, name.hasPrefix("custom:") {
+                let id = CustomTool.migratedID(String(name.dropFirst(7)), in: AppSettings.shared.customTools)
+                tab.provider = "custom:\(id)"
+            }
+            if let name = tab.provider {
+                guard let tool = Tool(id: name) else { continue }                  // a tool this version doesn't know
+                if case .custom(let id) = tool, !customToolIDs.contains(id) { continue }   // the user removed it meanwhile
+            }
             let id = tab.provider ?? "shell"
             guard counts[id, default: 0] < perTool else { continue }
             counts[id, default: 0] += 1

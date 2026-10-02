@@ -7,8 +7,8 @@ struct NotchNotice: Equatable {
     /// What clicking the banner does.
     enum Action: Equatable { case openTerminal, openUsage }
 
-    /// `nil` is the clean shell.
-    let provider: AgentProvider?
+    /// The tool that answered (or is waiting).
+    let tool: Tool
     /// Folder the session was working in, when it says anything useful.
     let project: String?
     /// What the notch says about it ("Te respondi aqui!").

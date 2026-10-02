@@ -80,6 +80,24 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// Commands the user registered to run in a tab (Antigravity, Aider…).
+    @Published private(set) var customTools: [CustomTool] {
+        didSet { if let data = try? JSONEncoder().encode(customTools) { defaults.set(data, forKey: "customTools") } }
+    }
+
+    /// Registers a tool. Returns false when it is invalid, a duplicate, or over the limit.
+    @discardableResult
+    func addCustomTool(name: String, command: String) -> Bool {
+        let tool = CustomTool(name: name, command: command).normalized()
+        guard tool.isValid, customTools.count < CustomTool.maxCount else { return false }
+        let taken = Set(customTools.map { $0.name.lowercased() } + ["claude", "codex", "terminal"])
+        guard !taken.contains(tool.name.lowercased()) else { return false }
+        customTools.append(tool)
+        return true
+    }
+
+    func removeCustomTool(id: String) { customTools.removeAll { $0.id == id } }
+
     @Published var accent: AccentChoice { didSet { defaults.set(accent.rawValue, forKey: "accent") } }
 
     @Published var motion: MotionPreference { didSet { defaults.set(motion.rawValue, forKey: "motion") } }
@@ -114,6 +132,14 @@ final class AppSettings: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         launchAtLogin = LoginItem.isEnabled
+        // First launch (nothing saved yet): the standard set. Once the user changes the
+        // list — even to empty — their choice is what is saved and respected.
+        if let data = defaults.data(forKey: "customTools") {
+            let saved = (try? JSONDecoder().decode([CustomTool].self, from: data)).map(CustomTool.migrated) ?? CustomTool.defaults
+            customTools = saved
+        } else {
+            customTools = CustomTool.defaults
+        }
         let chosenLanguage = defaults.string(forKey: "language").flatMap(LanguageChoice.init) ?? .system
         language = chosenLanguage
         Localization.current = chosenLanguage.resolved()

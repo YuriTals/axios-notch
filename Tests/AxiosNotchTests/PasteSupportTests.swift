@@ -102,7 +102,7 @@ final class PasteSupportTests: XCTestCase {
     func testDroppingFilesPastesTheirPathsIntoARealShell() throws {
         let store = TerminalSessionStore()
         defer { for key in store.keys { store.close(key) } }
-        let key = store.ensureSelected(nil)
+        let key = store.ensureSelected(.shell)
         let view = try XCTUnwrap(store.view(for: key))
         let settle = expectation(description: "shell started"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { settle.fulfill() }
         wait(for: [settle], timeout: 4)

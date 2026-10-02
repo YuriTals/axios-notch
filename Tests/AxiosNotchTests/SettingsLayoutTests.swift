@@ -42,7 +42,7 @@ final class SettingsLayoutTests: XCTestCase {
     }
 
     func testSettingsPages() {
-        XCTAssertEqual(SettingsPage.allCases, [.general, .appearance])
+        XCTAssertEqual(SettingsPage.allCases, [.general, .appearance, .tools])
         XCTAssertEqual(SettingsLayout.gridHeight, SettingsLayout.cardHeight * 2 + SettingsLayout.spacing)
         XCTAssertGreaterThan(SettingsLayout.pageHeight, SettingsLayout.gridHeight)       // room at the seam
     }

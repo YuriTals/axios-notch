@@ -87,8 +87,8 @@ struct NotchContentView: View {
                 .frame(width: controller.openSize(for: controller.state).width,
                        height: controller.openSize(for: controller.state).height, alignment: .top)
                 .transition(.opacity)
-        case .terminal(let provider):
-            TerminalPanelView(provider: provider, onClose: { controller.closeTerminal() })
+        case .terminal(let tool):
+            TerminalPanelView(tool: tool, onClose: { controller.closeTerminal() })
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
                 .frame(width: controller.openSize(for: controller.state).width,
@@ -146,9 +146,7 @@ struct NotchContentView: View {
 /// "Answer ready" announcement shown below the notch: who answered.
 private struct NoticeBanner: View {
     let notice: NotchNotice
-    private var provider: AgentProvider? { notice.provider }
-
-    private var tint: Color { provider.map(NotchTheme.accent(for:)) ?? NotchTheme.appAccent }
+    private var tint: Color { NotchTheme.accent(for: notice.tool) }
 
     /// Amber for "getting close", red for "almost out"; otherwise the tool's colour.
     private var dotColor: Color {
@@ -161,11 +159,7 @@ private struct NoticeBanner: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            if let provider {
-                ProviderGlyph(provider: provider, size: 16)
-            } else {
-                TerminalIcon().frame(width: 16, height: 16)
-            }
+            ToolGlyph(tool: notice.tool, size: 16)
             HStack(spacing: 5) {
                 Text(notice.phrase)
                     .font(.system(size: 11, weight: .medium))

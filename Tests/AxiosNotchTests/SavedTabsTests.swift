@@ -27,7 +27,7 @@ final class SavedTabsTests: XCTestCase {
         let saved = SavedTabs(tabs: [
             SavedTab(provider: "claude", directory: "/gone", wasSelected: false),
             SavedTab(provider: "codex", directory: "/here", wasSelected: true),
-            SavedTab(provider: "gemini", directory: "/here", wasSelected: false),         // a tool this version doesn't know
+            SavedTab(provider: "wat", directory: "/here", wasSelected: false),            // a tool this version doesn't know
             SavedTab(provider: nil, directory: nil, wasSelected: false),
         ])
         let tabs = saved.restorable(folderExists: { $0 == "/here" })
@@ -53,8 +53,8 @@ final class SavedTabsTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: base) }
 
         let first = TerminalSessionStore()
-        let a = first.openSession(nil, directory: one.path)
-        let b = first.openSession(nil, directory: two.path)
+        let a = first.openSession(.shell, directory: one.path)
+        let b = first.openSession(.shell, directory: two.path)
         first.select(a)                                                                   // the *first* tab is the selected one
         let settle = expectation(description: "shells started"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { settle.fulfill() }
         wait(for: [settle], timeout: 4)
@@ -68,7 +68,7 @@ final class SavedTabsTests: XCTestCase {
         defer { for key in second.keys { second.close(key) } }
         XCTAssertEqual(second.restoreTabs(saved), 2)
         XCTAssertEqual(second.keys.count, 2)
-        XCTAssertEqual(second.selectedKey(for: nil)?.number, 1)                           // selection restored
+        XCTAssertEqual(second.selectedKey(for: .shell)?.number, 1)                           // selection restored
         let settle2 = expectation(description: "restored shells started"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { settle2.fulfill() }
         wait(for: [settle2], timeout: 4)
         let folders = second.keys.compactMap { second.currentDirectory(for: $0) }.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path }

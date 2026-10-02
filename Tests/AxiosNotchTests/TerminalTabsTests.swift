@@ -13,59 +13,59 @@ final class TerminalTabsTests: XCTestCase {
     }
 
     func testFirstUseCreatesAndSelectsTabOne() {
-        XCTAssertNil(store.selectedKey(for: nil))
-        let key = store.ensureSelected(nil)
+        XCTAssertNil(store.selectedKey(for: .shell))
+        let key = store.ensureSelected(.shell)
         XCTAssertEqual(key, SessionKey(provider: nil, number: 1))
-        XCTAssertEqual(store.selectedKey(for: nil), key)
-        XCTAssertTrue(store.isActive(nil))
+        XCTAssertEqual(store.selectedKey(for: .shell), key)
+        XCTAssertTrue(store.isActive(.shell))
         // Asking again must not open a second one.
-        XCTAssertEqual(store.ensureSelected(nil), key)
-        XCTAssertEqual(store.keys(for: nil).count, 1)
+        XCTAssertEqual(store.ensureSelected(.shell), key)
+        XCTAssertEqual(store.keys(for: .shell).count, 1)
     }
 
     func testNewSessionsAreNumberedAndSelected() {
-        store.ensureSelected(nil)
-        let second = store.openSession(nil, directory: nil)
-        let third = store.openSession(nil, directory: NSTemporaryDirectory())
+        store.ensureSelected(.shell)
+        let second = store.openSession(.shell, directory: nil)
+        let third = store.openSession(.shell, directory: NSTemporaryDirectory())
         XCTAssertEqual([second.number, third.number], [2, 3])
-        XCTAssertEqual(store.selectedKey(for: nil), third)
-        XCTAssertEqual(store.keys(for: nil).map(\.number), [1, 2, 3])
+        XCTAssertEqual(store.selectedKey(for: .shell), third)
+        XCTAssertEqual(store.keys(for: .shell).map(\.number), [1, 2, 3])
     }
 
     func testTabsAreCappedPerTool() {
-        for _ in 0..<(SessionKey.maxPerProvider + 3) { store.openSession(nil, directory: nil) }
-        XCTAssertEqual(store.keys(for: nil).count, SessionKey.maxPerProvider)
+        for _ in 0..<(SessionKey.maxPerProvider + 3) { store.openSession(.shell, directory: nil) }
+        XCTAssertEqual(store.keys(for: .shell).count, SessionKey.maxPerProvider)
     }
 
     func testSelectingAndClosingMovesToANeighbour() {
-        let one = store.ensureSelected(nil)
-        let two = store.openSession(nil, directory: nil)
-        let three = store.openSession(nil, directory: nil)
+        let one = store.ensureSelected(.shell)
+        let two = store.openSession(.shell, directory: nil)
+        let three = store.openSession(.shell, directory: nil)
 
         store.select(id: one.id)
-        XCTAssertEqual(store.selectedKey(for: nil), one)
+        XCTAssertEqual(store.selectedKey(for: .shell), one)
 
         store.select(two)
         store.close(two)                                          // the middle one
-        XCTAssertEqual(store.keys(for: nil), [one, three])
-        XCTAssertEqual(store.selectedKey(for: nil), three)        // its neighbour took over
+        XCTAssertEqual(store.keys(for: .shell), [one, three])
+        XCTAssertEqual(store.selectedKey(for: .shell), three)        // its neighbour took over
 
         store.close(three)
-        XCTAssertEqual(store.selectedKey(for: nil), one)
+        XCTAssertEqual(store.selectedKey(for: .shell), one)
         store.close(one)
-        XCTAssertNil(store.selectedKey(for: nil))                 // nothing left: the panel closes
-        XCTAssertFalse(store.isActive(nil))
+        XCTAssertNil(store.selectedKey(for: .shell))                 // nothing left: the panel closes
+        XCTAssertFalse(store.isActive(.shell))
     }
 
     func testClosingATabThatIsNotSelectedKeepsTheSelection() {
-        let one = store.ensureSelected(nil)
-        let two = store.openSession(nil, directory: nil)
+        let one = store.ensureSelected(.shell)
+        let two = store.openSession(.shell, directory: nil)
         store.close(one)
-        XCTAssertEqual(store.selectedKey(for: nil), two)
+        XCTAssertEqual(store.selectedKey(for: .shell), two)
     }
 
     func testClosingATabReallyEndsItsShell() throws {
-        let key = store.ensureSelected(nil)
+        let key = store.ensureSelected(.shell)
         let started = expectation(description: "shell started")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { started.fulfill() }
         wait(for: [started], timeout: 3)
@@ -104,8 +104,8 @@ final class TerminalTabsTests: XCTestCase {
     func testClosingAnUnknownKeyIsHarmless() {
         store.close(SessionKey(provider: .codex, number: 9))
         store.select(SessionKey(provider: .codex, number: 9))
-        XCTAssertNil(store.selectedKey(for: .codex))
-        XCTAssertEqual(store.unreadCount(.codex), 0)
+        XCTAssertNil(store.selectedKey(for: .agent(.codex)))
+        XCTAssertEqual(store.unreadCount(.agent(.codex)), 0)
     }
 
     func testNewTabStartsInTheRequestedFolder() throws {
@@ -113,7 +113,7 @@ final class TerminalTabsTests: XCTestCase {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
 
-        let key = store.openSession(nil, directory: folder.path)
+        let key = store.openSession(.shell, directory: folder.path)
         // Give the shell a moment to start, then ask the OS where it is.
         let expectation = expectation(description: "shell started")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { expectation.fulfill() }

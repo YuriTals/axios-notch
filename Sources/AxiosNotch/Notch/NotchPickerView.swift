@@ -4,6 +4,7 @@ import SwiftUI
 struct NotchPickerView: View {
     @ObservedObject var controller: NotchWindowController
     @ObservedObject private var sessions = TerminalSessionStore.shared
+    @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -13,17 +14,14 @@ struct NotchPickerView: View {
                 .padding(.leading, 4)
 
             HStack(spacing: 10) {
-                ForEach(AgentProvider.allCases) { provider in
-                    ToolTile(title: provider.displayName, tint: NotchTheme.accent(for: provider), provider: provider) {
-                        ProviderGlyph(provider: provider, size: 30)
+                ForEach(Tool.all(customTools: settings.customTools), id: \.id) { tool in
+                    ToolTile(title: tool.displayName(customTools: settings.customTools), tint: NotchTheme.accent(for: tool), tool: tool) {
+                        ToolGlyph(tool: tool, size: 30)
                     } action: {
-                        controller.showUsage(for: provider)
+                        // Claude and Codex open their usage first (with a terminal button);
+                        // everything else goes straight to its terminal.
+                        if let provider = tool.agent { controller.showUsage(for: provider) } else { controller.openTerminal(for: tool) }
                     }
-                }
-                ToolTile(title: "Terminal", tint: NotchTheme.appAccent, provider: nil) {
-                    TerminalIcon().frame(width: 32, height: 32)
-                } action: {
-                    controller.openTerminal(for: nil)
                 }
             }
         }
@@ -64,7 +62,7 @@ private struct ToolTile<Glyph: View>: View {
     let title: String
     let tint: Color
     /// Which terminal session this tile fronts (`nil` is the clean shell).
-    let provider: AgentProvider?
+    let tool: Tool
     @ViewBuilder let glyph: () -> Glyph
     let action: () -> Void
     @State private var hovering = false
@@ -88,7 +86,7 @@ private struct ToolTile<Glyph: View>: View {
                     }
             }
             .overlay(alignment: .topTrailing) {
-                SessionBadge(provider: provider).padding(8)
+                SessionBadge(tool: tool).padding(8)
             }
             .scaleEffect(hovering && !AppSettings.shared.reduceMotion ? 1.04 : 1)
             .shadow(color: tint.opacity(hovering ? 0.25 : 0), radius: 10)
@@ -191,20 +189,20 @@ struct UnreadBadge: View {
 /// (bouncing dots) → unseen answers (red count) → merely alive (green dot).
 struct SessionBadge: View {
     @ObservedObject private var sessions = TerminalSessionStore.shared
-    let provider: AgentProvider?
+    let tool: Tool
 
     var body: some View {
         Group {
-            if sessions.isWaiting(provider) {
+            if sessions.isWaiting(tool) {
                 WaitingBadge()
-            } else if sessions.isWorking(provider) {
+            } else if sessions.isWorking(tool) {
                 BouncingDots()
-            } else if sessions.unreadCount(provider) > 0 {
-                UnreadBadge(count: sessions.unreadCount(provider))
-            } else if sessions.isActive(provider) {
+            } else if sessions.unreadCount(tool) > 0 {
+                UnreadBadge(count: sessions.unreadCount(tool))
+            } else if sessions.isActive(tool) {
                 ActiveDot()
             }
         }
-        .animation(NotchMotion.spring(response: 0.3, damping: 0.7), value: sessions.unreadCount(provider))
+        .animation(NotchMotion.spring(response: 0.3, damping: 0.7), value: sessions.unreadCount(tool))
     }
 }

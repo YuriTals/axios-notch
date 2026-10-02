@@ -3,16 +3,16 @@ import XCTest
 
 final class PTYSessionTests: XCTestCase {
     func testCleanShellIsJustAnInteractiveLoginShell() {
-        let launch = PTYSession.launchArguments(for: nil)
+        let launch = PTYSession.launchArguments(for: .shell)
         XCTAssertEqual(launch.args, ["-l"])
         XCTAssertFalse(launch.executable.isEmpty)
     }
 
     func testProviderRunsItsCLIThroughTheLoginShell() {
-        let claude = PTYSession.launchArguments(for: .claude)
+        let claude = PTYSession.launchArguments(for: .agent(.claude))
         XCTAssertEqual(claude.args, ["-l", "-c", "claude"])
 
-        let codex = PTYSession.launchArguments(for: .codex)
+        let codex = PTYSession.launchArguments(for: .agent(.codex))
         XCTAssertEqual(codex.args, ["-l", "-c", "codex"])
         XCTAssertEqual(claude.executable, codex.executable)
     }

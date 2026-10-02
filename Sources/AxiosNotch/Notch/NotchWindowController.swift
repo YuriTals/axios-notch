@@ -14,7 +14,7 @@ enum NotchState: Equatable {
     /// 5-hour and weekly usage for one provider.
     case usage(AgentProvider)
     /// `nil` is a clean shell; a provider runs that CLI.
-    case terminal(AgentProvider?)
+    case terminal(Tool)
 }
 
 private final class NotchHostingView<Content: View>: NSHostingView<Content> {
@@ -59,7 +59,16 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// Room around the surface for the drop shadow.
     private let shadowInset = CGSize(width: 24, height: 30)
     /// Content heights below the notch strip; widths include the ears.
-    private let pickerSize = CGSize(width: 340, height: 112)
+    private static let pickerHeight: CGFloat = 112
+    /// Wide enough for every tile: 3 built in plus the user's own (each 90 + 10 gap).
+    private var pickerSize: CGSize {
+        CGSize(width: Self.pickerWidth(tiles: Tool.all().count), height: Self.pickerHeight)
+    }
+
+    static func pickerWidth(tiles: Int) -> CGFloat {
+        let count = CGFloat(tiles)
+        return max(340, 50 + count * 90 + (count - 1) * 10)
+    }
     private let usageSize = CGSize(width: 460, height: 278)
     // header (26) + gap (12) + two cards + gap + bottom padding
     private let settingsSize = CGSize(width: 560, height: 26 + 12 + SettingsLayout.pageHeight + 18)
@@ -135,7 +144,7 @@ final class NotchWindowController: NSObject, ObservableObject {
         alertObserver = usageStore.alerts
             .receive(on: DispatchQueue.main)
             .sink { [weak self] alert in
-                self?.announce(NotchNotice(provider: alert.provider, project: nil, phrase: alert.message,
+                self?.announce(NotchNotice(tool: .agent(alert.provider), project: nil, phrase: alert.message,
                                            level: alert.severity, action: .openUsage))
             }
 
@@ -260,9 +269,9 @@ final class NotchWindowController: NSObject, ObservableObject {
         case .openTerminal:
             // Land on the exact tab that answered.
             if let id = notice.sessionID { TerminalSessionStore.shared.select(id: id) }
-            openTerminal(for: notice.provider)
+            openTerminal(for: notice.tool)
         case .openUsage:
-            if let provider = notice.provider { showUsage(for: provider) } else { showPicker() }
+            if let provider = notice.tool.agent { showUsage(for: provider) } else { showPicker() }
         }
     }
 
@@ -312,18 +321,18 @@ final class NotchWindowController: NSObject, ObservableObject {
     }
 
     /// Files were dropped on a tool: open its chat and add them.
-    func attach(_ urls: [URL], to provider: AgentProvider?) {
+    func attach(_ urls: [URL], to tool: Tool) {
         guard !urls.isEmpty else { return }
         // Folders are not "attached": they are where a new session should start.
         if FileDrag.areAllFolders(urls) {
             for folder in urls.prefix(SessionKey.maxPerProvider) {
-                TerminalSessionStore.shared.openSession(provider, directory: folder.path)
+                TerminalSessionStore.shared.openSession(tool, directory: folder.path)
             }
-            openTerminal(for: provider)                    // shows the last one opened
+            openTerminal(for: tool)                        // shows the last one opened
             return
         }
-        openTerminal(for: provider)
-        TerminalSessionStore.shared.attach(paths: urls.map(\.path), to: provider)
+        openTerminal(for: tool)
+        TerminalSessionStore.shared.attach(paths: urls.map(\.path), to: tool)
     }
 
     func showPicker() {
@@ -334,14 +343,14 @@ final class NotchWindowController: NSObject, ObservableObject {
         setState(.usage(provider))
     }
 
-    /// Opens the terminal: running `provider`'s CLI, or a clean shell when
-    /// `provider` is nil.
-    func openTerminal(for provider: AgentProvider?) {
+    /// Opens the terminal of a tool: Claude, Codex, a registered command, or a
+    /// clean shell.
+    func openTerminal(for tool: Tool) {
         // Make sure the tool has a tab to show (the first one is created here,
         // never from inside the view).
-        TerminalSessionStore.shared.ensureSelected(provider)
+        TerminalSessionStore.shared.ensureSelected(tool)
         if case .terminal = state {} else { stateBeforeTerminal = state }
-        setState(.terminal(provider))
+        setState(.terminal(tool))
     }
 
     func closeTerminal() {

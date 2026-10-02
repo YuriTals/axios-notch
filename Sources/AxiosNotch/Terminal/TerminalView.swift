@@ -133,24 +133,21 @@ enum TerminalFont {
 /// The terminal panel: a tab bar for this tool's sessions on top, the
 /// selected terminal below.
 struct TerminalPanelView: View {
-    let provider: AgentProvider?
+    let tool: Tool
     let onClose: () -> Void
     @ObservedObject private var store = TerminalSessionStore.shared
 
-    private var selected: SessionKey? { store.selectedKey(for: provider) }
+    private var selected: SessionKey? { store.selectedKey(for: tool) }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                if let provider {
-                    ProviderGlyph(provider: provider, size: 14)
-                } else {
-                    TerminalIcon().frame(width: 14, height: 14)
-                }
-                SessionTabs(provider: provider)
+                ToolGlyph(tool: tool, size: 14)
+                SessionTabs(tool: tool)
                 Spacer(minLength: 4)
-                CopyAnswerButton(provider: provider)
-                OpenFolderButton(provider: provider)
+                // Copying "the last answer" needs a screen layout we know; not for unknown tools.
+                if !tool.isCustom { CopyAnswerButton(tool: tool) }
+                OpenFolderButton(tool: tool)
                 Button(action: onClose) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.white.opacity(0.6))
@@ -177,7 +174,7 @@ struct TerminalPanelView: View {
 /// Copies the output since the last Enter to the clipboard, and says so by
 /// turning into a checkmark for a moment.
 private struct CopyAnswerButton: View {
-    let provider: AgentProvider?
+    let tool: Tool
     @ObservedObject private var store = TerminalSessionStore.shared
     @State private var copied = false
     @State private var nothing = false
@@ -196,7 +193,7 @@ private struct CopyAnswerButton: View {
     }
 
     private func copy() {
-        if let key = store.selectedKey(for: provider), let text = store.lastAnswer(for: key) {
+        if let key = store.selectedKey(for: tool), let text = store.lastAnswer(for: key) {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
             copied = true
@@ -212,11 +209,11 @@ private struct CopyAnswerButton: View {
 /// installed editor. The folder is read when you click, so it is always the
 /// one the shell is in right now.
 private struct OpenFolderButton: View {
-    let provider: AgentProvider?
+    let tool: Tool
     @ObservedObject private var store = TerminalSessionStore.shared
 
     private func folder() -> String? {
-        store.selectedKey(for: provider).flatMap { store.currentDirectory(for: $0) }
+        store.selectedKey(for: tool).flatMap { store.currentDirectory(for: $0) }
     }
 
     var body: some View {
@@ -249,7 +246,7 @@ private struct OpenFolderButton: View {
 
 /// One chip per open session of this tool, plus "+" to open another.
 private struct SessionTabs: View {
-    let provider: AgentProvider?
+    let tool: Tool
     @ObservedObject private var store = TerminalSessionStore.shared
 
     var body: some View {
@@ -257,10 +254,10 @@ private struct SessionTabs: View {
             // Project folders can change under a shell (`cd`), so refresh the names.
             TimelineView(.periodic(from: .now, by: 2)) { context in
                 HStack(spacing: 5) {
-                    ForEach(store.keys(for: provider), id: \.id) { key in
-                        SessionTab(key: key, isSelected: key == store.selectedKey(for: provider), tick: context.date)
+                    ForEach(store.keys(for: tool), id: \.id) { key in
+                        SessionTab(key: key, isSelected: key == store.selectedKey(for: tool), tick: context.date)
                     }
-                    NewSessionButton(provider: provider, tick: context.date)
+                    NewSessionButton(tool: tool, tick: context.date)
                 }
             }
         }
@@ -317,16 +314,16 @@ private struct SessionTab: View {
 /// "+" — a fresh session in the home folder, in the current tab's folder, or in
 /// a folder you pick.
 private struct NewSessionButton: View {
-    let provider: AgentProvider?
+    let tool: Tool
     /// See `SessionTab.tick`: the current folder changes without any published
     /// value, so a changing input keeps the menu's contents fresh.
     let tick: Date
     @ObservedObject private var store = TerminalSessionStore.shared
 
-    private var atLimit: Bool { store.keys(for: provider).count >= SessionKey.maxPerProvider }
+    private var atLimit: Bool { store.keys(for: tool).count >= SessionKey.maxPerProvider }
 
     private var currentFolder: String? {
-        guard let key = store.selectedKey(for: provider),
+        guard let key = store.selectedKey(for: tool),
               let path = store.currentDirectory(for: key),
               ProcessDirectory.projectName(forPath: path) != nil else { return nil }
         return path
@@ -334,10 +331,10 @@ private struct NewSessionButton: View {
 
     var body: some View {
         Menu {
-            Button(tr("Nova sessão", "New session")) { store.openSession(provider, directory: nil) }
+            Button(tr("Nova sessão", "New session")) { store.openSession(tool, directory: nil) }
             if let folder = currentFolder {
                 Button(tr("Na mesma pasta (\(ProcessDirectory.projectName(forPath: folder) ?? ""))", "In the same folder (\(ProcessDirectory.projectName(forPath: folder) ?? ""))")) {
-                    store.openSession(provider, directory: folder)
+                    store.openSession(tool, directory: folder)
                 }
             }
             Button(tr("Escolher pasta…", "Choose folder…")) { chooseFolder() }
@@ -347,7 +344,7 @@ private struct NewSessionButton: View {
                 Text(tr("Recentes", "Recent"))
                 ForEach(recent, id: \.self) { path in
                     Button(ProcessDirectory.projectName(forPath: path) ?? path) {
-                        store.openSession(provider, directory: path)
+                        store.openSession(tool, directory: path)
                     }
                 }
                 Divider()
@@ -380,7 +377,7 @@ private struct NewSessionButton: View {
         NSApp.activate(ignoringOtherApps: true)
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
-            DispatchQueue.main.async { store.openSession(provider, directory: url.path) }
+            DispatchQueue.main.async { store.openSession(tool, directory: url.path) }
         }
     }
 }

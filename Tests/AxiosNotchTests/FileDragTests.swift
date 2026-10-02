@@ -69,8 +69,8 @@ final class FileDragTests: XCTestCase {
     func testAttachingToAShellPastesTheEscapedPathOnceItIsReady() throws {
         let store = TerminalSessionStore()
         defer { for key in store.keys { store.close(key) } }
-        store.attach(paths: ["/tmp/uma foto.png"], to: nil)                          // creates the tab, waits, pastes
-        let key = try XCTUnwrap(store.selectedKey(for: nil))
+        store.attach(paths: ["/tmp/uma foto.png"], to: .shell)                          // creates the tab, waits, pastes
+        let key = try XCTUnwrap(store.selectedKey(for: .shell))
         let view = try XCTUnwrap(store.view(for: key))
         let settle = expectation(description: "pasted"); DispatchQueue.main.asyncAfter(deadline: .now() + 3) { settle.fulfill() }
         wait(for: [settle], timeout: 6)
@@ -113,11 +113,11 @@ final class FolderDropTests: XCTestCase {
 
         let store = TerminalSessionStore()
         defer { for key in store.keys { store.close(key) } }
-        store.ensureSelected(nil)                                                       // a tab already exists
-        let first = store.openSession(nil, directory: one.path)
-        let second = store.openSession(nil, directory: two.path)
-        XCTAssertEqual(store.keys(for: nil).count, 3, "folders must open new tabs, never reuse the old one")
-        XCTAssertEqual(store.selectedKey(for: nil), second)
+        store.ensureSelected(.shell)                                                       // a tab already exists
+        let first = store.openSession(.shell, directory: one.path)
+        let second = store.openSession(.shell, directory: two.path)
+        XCTAssertEqual(store.keys(for: .shell).count, 3, "folders must open new tabs, never reuse the old one")
+        XCTAssertEqual(store.selectedKey(for: .shell), second)
 
         let settle = expectation(description: "shells started"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { settle.fulfill() }
         wait(for: [settle], timeout: 4)
