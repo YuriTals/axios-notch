@@ -147,7 +147,7 @@ private struct LimitCard: View {
                     Spacer(minLength: 0)
                     ProgressBar(progress: min(max(limit.percent / 100, 0), 1), accent: color)
                     TimelineView(.periodic(from: .now, by: 30)) { context in
-                        Text(limit.resetsAt.map { resetText($0, context.date) } ?? " ")
+                        Text((limit.resetsAt.map { resetText($0, context.date) } ?? " ") + staleSuffix(now: context.date))
                             .font(.system(size: 10))
                             .foregroundStyle(.white.opacity(0.45))
                     }
@@ -172,6 +172,13 @@ private struct LimitCard: View {
         }
         .frame(height: 142)   // same height whether or not there is a footnote
         .animation(.smooth, value: limit)
+    }
+
+    /// Shown when the numbers come from earlier (the provider is rate-limiting
+    /// us, or the app just started): "· há 12 min".
+    private func staleSuffix(now: Date) -> String {
+        guard let fetched = state.rateLimits?.fetchedAt else { return "" }
+        return UsageFormat.ageSuffix(since: fetched, now: now)
     }
 
     private var message: String {
@@ -318,6 +325,13 @@ enum UsageFormat {
     }
 
     static func cost(_ value: Double) -> String { String(format: "$%.2f", value) }
+
+    /// " · há 12 min" once data is older than a few minutes; nothing while fresh.
+    static func ageSuffix(since fetched: Date, now: Date) -> String {
+        let minutes = Int(now.timeIntervalSince(fetched) / 60)
+        guard minutes >= 4 else { return "" }
+        return minutes >= 60 ? " · há \(minutes / 60) h" : " · há \(minutes) min"
+    }
 
     static func weekday(of date: Date) -> String {
         let formatter = DateFormatter()

@@ -5,18 +5,31 @@ import Foundation
 /// read per request, held only in memory, never logged, and never refreshed
 /// here — refreshing would rotate the CLI's refresh token behind its back.
 enum RateLimitClient {
-    struct Failure: Error { let message: String }
+    struct Failure: Error {
+        let message: String
+        /// The server's `Retry-After`, in seconds, when it sent one.
+        var retryAfter: TimeInterval? = nil
+    }
 
-    static func fetch(_ provider: AgentProvider) async -> LimitState {
+    /// The outcome, plus how long the server asked us to wait if it did.
+    struct Result {
+        let state: LimitState
+        let succeeded: Bool
+        let retryAfter: TimeInterval?
+    }
+
+    static func fetch(_ provider: AgentProvider) async -> Result {
         do {
+            let limits: AgentRateLimits
             switch provider {
-            case .claude: return .available(try await fetchClaude())
-            case .codex: return .available(try await fetchCodex())
+            case .claude: limits = try await fetchClaude()
+            case .codex: limits = try await fetchCodex()
             }
+            return Result(state: .available(limits), succeeded: true, retryAfter: nil)
         } catch let failure as Failure {
-            return .unavailable(failure.message)
+            return Result(state: .unavailable(failure.message), succeeded: false, retryAfter: failure.retryAfter)
         } catch {
-            return .unavailable("Sem conexão com \(provider.displayName)")
+            return Result(state: .unavailable("Sem conexão com \(provider.displayName)"), succeeded: false, retryAfter: nil)
         }
     }
 
@@ -124,6 +137,10 @@ enum RateLimitClient {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 401 || status == 403 {
             throw Failure(message: "Sessão expirada — abra o \(provider) para renovar")
+        }
+        if status == 429 {
+            let wait = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
+            throw Failure(message: "\(provider) limitou as consultas", retryAfter: wait)
         }
         guard (200..<300).contains(status) else {
             throw Failure(message: "\(provider) respondeu \(status)")

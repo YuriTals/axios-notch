@@ -22,6 +22,10 @@ private final class ActivityTerminalView: LocalProcessTerminalView {
 struct FinishNotice: Equatable {
     /// `nil` is the clean shell.
     let provider: AgentProvider?
+    /// Folder the session was working in, when it says anything useful.
+    let project: String?
+    /// What the notch says about it ("Te respondi aqui!").
+    let phrase: String
     let id = UUID()
 }
 
@@ -44,6 +48,8 @@ final class TerminalSessionStore: ObservableObject {
     @Published private(set) var unread: [String: Int] = [:]
     /// The most recent unseen finish, for the notch to announce.
     @Published private(set) var lastFinish: FinishNotice?
+
+    private var lastPhrase: String?
 
     /// The session whose terminal is currently on screen, if any.
     private var visibleKey: String?
@@ -103,6 +109,14 @@ final class TerminalSessionStore: ObservableObject {
             return false
         }
 
+        /// The project folder this session is in right now. A shell's own
+        /// directory is the one to read (its builtin `cd` changes it); a CLI
+        /// session keeps the directory it was started in.
+        func projectName() -> String? {
+            guard let process = view.process, process.running else { return nil }
+            return ProcessDirectory.current(pid: process.shellPid).flatMap { ProcessDirectory.projectName(forPath: $0) }
+        }
+
         func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
         func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
         func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
@@ -141,10 +155,12 @@ final class TerminalSessionStore: ObservableObject {
             guard let self, let session else { return }
             self.setWorking(session.tracker.isWorking, key: key)
         }
-        session.onFinished = { [weak self] in
+        session.onFinished = { [weak self, weak session] in
             guard let self, self.visibleKey != key else { return }
             self.unread[key, default: 0] += 1
-            self.lastFinish = FinishNotice(provider: provider)
+            let phrase = PhraseBook.pick(forShell: provider == nil, avoiding: self.lastPhrase)
+            self.lastPhrase = phrase
+            self.lastFinish = FinishNotice(provider: provider, project: session?.projectName(), phrase: phrase)
         }
         session.onExit = { [weak self, weak session] in
             // Only drop it if it is still the current session for this key.
@@ -157,7 +173,8 @@ final class TerminalSessionStore: ObservableObject {
             self.unread[key] = nil
         }
         let (executable, args) = PTYSession.launchArguments(for: provider)
-        session.view.startProcess(executable: executable, args: args)
+        // Start in the home folder: a packaged .app inherits "/" as its directory.
+        session.view.startProcess(executable: executable, args: args, currentDirectory: NSHomeDirectory())
         if mode == .marker { session.startPolling() }
         sessions[key] = session
         // Created during a SwiftUI update, so publish on the next turn.

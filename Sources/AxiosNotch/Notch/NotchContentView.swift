@@ -95,8 +95,11 @@ struct NotchContentView: View {
             closedCore
                 .frame(width: controller.notchStripSize.width, height: controller.notchStripSize.height)
             if let notice = controller.banner {
-                FinishBanner(provider: notice.provider)
+                FinishBanner(notice: notice)
                     .frame(height: NotchWindowController.bannerHeight)
+                    .contentShape(Rectangle())
+                    // Jump straight to the terminal that just answered.
+                    .onTapGesture { controller.openTerminal(for: notice.provider) }
                     .transition(.opacity.animation(.easeOut(duration: 0.2).delay(0.12)))
             }
         }
@@ -133,7 +136,8 @@ struct NotchContentView: View {
 
 /// "Answer ready" announcement shown below the notch: who answered.
 private struct FinishBanner: View {
-    let provider: AgentProvider?
+    let notice: FinishNotice
+    private var provider: AgentProvider? { notice.provider }
 
     private var tint: Color { provider.map(NotchTheme.accent(for:)) ?? .white }
 
@@ -144,11 +148,23 @@ private struct FinishBanner: View {
             } else {
                 TerminalIcon().frame(width: 16, height: 16)
             }
-            Text(provider == nil ? "Comando concluído" : "Resposta pronta")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.9))
-                .lineLimit(1)
+            HStack(spacing: 5) {
+                Text(notice.phrase)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.9))
+                if let project = notice.project {
+                    Text("· \(project)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+            }
+            .lineLimit(1)
+            .truncationMode(.middle)
             Circle().fill(tint).frame(width: 5, height: 5)
         }
+        .padding(.horizontal, 12)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Abre o terminal")
     }
 }

@@ -33,7 +33,9 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// closed; the closed notch grows downward to announce it.
     @Published private(set) var banner: FinishNotice?
     static let bannerHeight: CGFloat = 34
-    static let bannerMinWidth: CGFloat = 220
+    static let bannerMinWidth: CGFloat = 270
+    /// Wider when the banner also names the project.
+    static let bannerProjectWidth: CGFloat = 350
     private var bannerDismiss: DispatchWorkItem?
     private var finishObserver: AnyCancellable?
 
@@ -79,7 +81,7 @@ final class NotchWindowController: NSObject, ObservableObject {
             }
             if banner != nil {
                 size.height += Self.bannerHeight
-                size.width = max(size.width, Self.bannerMinWidth)
+                size.width = max(size.width, banner?.project == nil ? Self.bannerMinWidth : Self.bannerProjectWidth)
             }
             return size
         }

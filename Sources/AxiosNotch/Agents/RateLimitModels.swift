@@ -1,20 +1,20 @@
 import Foundation
 
 /// How much of a plan's window is used, as the provider itself reports it.
-struct AgentLimit: Equatable {
+struct AgentLimit: Equatable, Codable {
     /// 0...100 (can exceed 100 briefly when over limit).
     var percent: Double
     var resetsAt: Date?
 }
 
 /// A weekly cap that applies to one model or product (Opus, Sonnet, …).
-struct AgentModelLimit: Equatable, Identifiable {
+struct AgentModelLimit: Equatable, Identifiable, Codable {
     var id: String { label }
     let label: String
     var limit: AgentLimit
 }
 
-struct AgentRateLimits: Equatable {
+struct AgentRateLimits: Equatable, Codable {
     var fiveHour: AgentLimit?
     var weekly: AgentLimit?
     /// Only the caps the provider reports and that have been touched.
