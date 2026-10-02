@@ -22,14 +22,16 @@ struct LimitAlert: Equatable {
         let name = provider.displayName
         let phrase: String
         switch window {
-        case .fiveHour: phrase = "da janela de 5h"
-        case .weekly: phrase = "do limite semanal"
+        case .fiveHour: phrase = tr("da janela de 5h", "of the 5h window")
+        case .weekly: phrase = tr("do limite semanal", "of the weekly limit")
         }
         switch kind {
         case .threshold(let level):
             return "\(name): \(Int(percent.rounded()))% \(phrase)\(level >= 90 ? "!" : "")"
         case .reset:
-            return window == .fiveHour ? "\(name): janela de 5h reiniciou!" : "\(name): limite semanal reiniciou!"
+            return window == .fiveHour
+                ? tr("\(name): janela de 5h reiniciou!", "\(name): 5h window reset!")
+                : tr("\(name): limite semanal reiniciou!", "\(name): weekly limit reset!")
         }
     }
 

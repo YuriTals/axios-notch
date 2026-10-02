@@ -18,8 +18,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .general: return "Ajustes"
-        case .appearance: return "Aparência"
+        case .general: return tr("Ajustes", "Settings")
+        case .appearance: return tr("Aparência", "Appearance")
         }
     }
 }
@@ -39,7 +39,7 @@ struct NotchSettingsView: View {
         VStack(spacing: 12) {
             HStack(spacing: 10) {
                 IconButton(systemName: "chevron.left") { controller.showPicker() }
-                    .accessibilityLabel("Voltar")
+                    .accessibilityLabel(tr("Voltar", "Back"))
                 Text(page.title)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.white)
@@ -91,13 +91,13 @@ struct NotchSettingsView: View {
     // A single block: the grid centres it on the page.
     private var appearancePage: some View {
         CardGridLayout {
-            SettingsCard(title: "Cor de destaque") {
+            SettingsCard(title: tr("Cor de destaque", "Accent color")) {
                 HStack(spacing: 9) {
                     ForEach(AccentChoice.allCases) { choice in
                         AccentSwatch(choice: choice, isSelected: settings.accent == choice) { settings.accent = choice }
                     }
                 }
-                Caption("Controles dos ajustes, tile do Terminal e o aviso dele. Claude e Codex mantêm as cores próprias.")
+                Caption(tr("Controles dos ajustes, tile do Terminal e o aviso dele. Claude e Codex mantêm as cores próprias.", "Settings controls, the Terminal tile and its notice. Claude and Codex keep their own colors."))
             }
         }
     }
@@ -105,16 +105,22 @@ struct NotchSettingsView: View {
     // Blocks flow two per row; a lone block is centred.
     private var generalPage: some View {
         CardGridLayout {
-            SettingsCard(title: "Geral") {
-                Toggle("Iniciar ao fazer login", isOn: $settings.launchAtLogin)
+            SettingsCard(title: tr("Geral", "General")) {
+                Toggle(tr("Iniciar ao fazer login", "Launch at login"), isOn: $settings.launchAtLogin)
                 if let error = settings.loginError {
                     Caption(error, color: Color(red: 0.95, green: 0.45, blue: 0.4))
                 } else if !LoginItem.isBundled {
-                    Caption("Fora de um .app: usa um LaunchAgent deste binário.")
+                    Caption(tr("Fora de um .app: usa um LaunchAgent deste binário.", "Outside an .app: uses a LaunchAgent for this binary."))
                 }
+                Text(tr("Idioma", "Language"))
+                Picker("", selection: $settings.language) {
+                    ForEach(LanguageChoice.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
             }
-            SettingsCard(title: "Vibração") {
-                Toggle("Vibrar ao passar o mouse", isOn: $settings.hoverHaptic)
+            SettingsCard(title: tr("Vibração", "Haptics")) {
+                Toggle(tr("Vibrar ao passar o mouse", "Vibrate on hover"), isOn: $settings.hoverHaptic)
                 Picker("", selection: $settings.hapticStrength) {
                     ForEach(HapticStrength.allCases) { Text($0.label).tag($0) }
                 }
@@ -122,19 +128,19 @@ struct NotchSettingsView: View {
                 .labelsHidden()
                 .disabled(!settings.hoverHaptic)
             }
-            SettingsCard(title: "Acessibilidade") {
-                Text("Reduzir movimento")
+            SettingsCard(title: tr("Acessibilidade", "Accessibility")) {
+                Text(tr("Reduzir movimento", "Reduce motion"))
                 Picker("", selection: $settings.motion) {
                     ForEach(MotionPreference.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                Caption("Troca saltos e molas por transições simples.")
+                Caption(tr("Troca saltos e molas por transições simples.", "Swaps bounces and springs for simple transitions."))
             }
-            SettingsCard(title: "Avisos e terminal") {
-                Toggle("Aviso de resposta pronta", isOn: $settings.finishBanner)
+            SettingsCard(title: tr("Avisos e terminal", "Notices & terminal")) {
+                Toggle(tr("Aviso de resposta pronta", "Answer-ready notice"), isOn: $settings.finishBanner)
                 HStack {
-                    Text("Duração")
+                    Text(tr("Duração", "Duration"))
                     Slider(value: $settings.bannerSeconds, in: 2...10, step: 0.5)
                         .disabled(!settings.finishBanner)
                     Text(String(format: "%.1f s", settings.bannerSeconds))
@@ -143,7 +149,7 @@ struct NotchSettingsView: View {
                         .frame(width: 40, alignment: .trailing)
                 }
                 Stepper(value: $settings.terminalFontSize, in: 10...20, step: 1) {
-                    Text("Fonte do terminal: \(Int(settings.terminalFontSize)) pt")
+                    Text(tr("Fonte do terminal: \(Int(settings.terminalFontSize)) pt", "Terminal font: \(Int(settings.terminalFontSize)) pt"))
                 }
             }
         }

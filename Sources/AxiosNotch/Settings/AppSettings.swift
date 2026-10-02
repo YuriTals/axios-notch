@@ -11,12 +11,12 @@ enum AccentChoice: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .orange: return "Laranja"
-        case .blue: return "Azul"
-        case .green: return "Verde"
-        case .purple: return "Roxo"
-        case .pink: return "Rosa"
-        case .gray: return "Cinza"
+        case .orange: return tr("Laranja", "Orange")
+        case .blue: return tr("Azul", "Blue")
+        case .green: return tr("Verde", "Green")
+        case .purple: return tr("Roxo", "Purple")
+        case .pink: return tr("Rosa", "Pink")
+        case .gray: return tr("Cinza", "Gray")
         }
     }
 
@@ -38,8 +38,8 @@ enum MotionPreference: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .system: return "Sistema"
-        case .reduce: return "Reduzir"
+        case .system: return tr("Sistema", "System")
+        case .reduce: return tr("Reduzir", "Reduce")
         case .full: return "Normal"
         }
     }
@@ -52,9 +52,9 @@ enum HapticStrength: Int, CaseIterable, Identifiable {
     var id: Int { rawValue }
     var label: String {
         switch self {
-        case .soft: return "Suave"
-        case .medium: return "Médio"
-        case .strong: return "Forte"
+        case .soft: return tr("Suave", "Soft")
+        case .medium: return tr("Médio", "Medium")
+        case .strong: return tr("Forte", "Strong")
         }
     }
 }
@@ -73,6 +73,13 @@ final class AppSettings: ObservableObject {
     /// Why the last launch-at-login change failed, if it did.
     @Published private(set) var loginError: String?
 
+    @Published var language: LanguageChoice {
+        didSet {
+            defaults.set(language.rawValue, forKey: "language")
+            Localization.current = language.resolved()
+        }
+    }
+
     @Published var accent: AccentChoice { didSet { defaults.set(accent.rawValue, forKey: "accent") } }
 
     @Published var motion: MotionPreference { didSet { defaults.set(motion.rawValue, forKey: "motion") } }
@@ -90,6 +97,9 @@ final class AppSettings: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         launchAtLogin = LoginItem.isEnabled
+        let chosenLanguage = defaults.string(forKey: "language").flatMap(LanguageChoice.init) ?? .system
+        language = chosenLanguage
+        Localization.current = chosenLanguage.resolved()
         accent = defaults.string(forKey: "accent").flatMap(AccentChoice.init) ?? .orange
         motion = defaults.string(forKey: "motion").flatMap(MotionPreference.init) ?? .system
         hoverHaptic = defaults.object(forKey: "hoverHaptic") as? Bool ?? true
@@ -118,7 +128,7 @@ final class AppSettings: ObservableObject {
             try LoginItem.setEnabled(launchAtLogin)
             loginError = nil
         } catch {
-            loginError = "Não foi possível alterar: \(error.localizedDescription)"
+            loginError = tr("Não foi possível alterar: \(error.localizedDescription)", "Couldn't change: \(error.localizedDescription)")
             applyingLogin = true
             launchAtLogin = LoginItem.isEnabled
             applyingLogin = false

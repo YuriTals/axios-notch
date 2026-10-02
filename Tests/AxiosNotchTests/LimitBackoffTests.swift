@@ -62,10 +62,12 @@ final class LimitBackoffTests: XCTestCase {
     }
 
     func testAgeSuffixAppearsOnlyWhenStale() {
-        let now = Date()
-        XCTAssertEqual(UsageFormat.ageSuffix(since: now.addingTimeInterval(-60), now: now), "")
-        XCTAssertEqual(UsageFormat.ageSuffix(since: now.addingTimeInterval(-12 * 60), now: now), " · há 12 min")
-        XCTAssertEqual(UsageFormat.ageSuffix(since: now.addingTimeInterval(-3 * 3600), now: now), " · há 3 h")
+        withLanguage(.pt) {
+            let now = Date()
+            XCTAssertEqual(UsageFormat.ageSuffix(since: now.addingTimeInterval(-60), now: now), "")
+            XCTAssertEqual(UsageFormat.ageSuffix(since: now.addingTimeInterval(-12 * 60), now: now), " · há 12 min")
+            XCTAssertEqual(UsageFormat.ageSuffix(since: now.addingTimeInterval(-3 * 3600), now: now), " · há 3 h")
+        }
     }
 }
 

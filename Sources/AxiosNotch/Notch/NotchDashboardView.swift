@@ -15,12 +15,12 @@ struct NotchUsageView: View {
             header
             HStack(spacing: 10) {
                 LimitCard(
-                    title: "Janela de 5h", limit: limits.rateLimits?.fiveHour, state: limits, accent: accent,
+                    title: tr("Janela de 5h", "5h window"), limit: limits.rateLimits?.fiveHour, state: limits, accent: accent,
                     resetText: { UsageFormat.remaining(until: $0, now: $1) },
                     footnote: footnote(summary?.fiveHourBlock)
                 )
                 LimitCard(
-                    title: "Semana", limit: limits.rateLimits?.weekly, state: limits, accent: accent,
+                    title: tr("Semana", "Week"), limit: limits.rateLimits?.weekly, state: limits, accent: accent,
                     resetText: { date, _ in UsageFormat.weekday(of: date) },
                     footnote: footnote(summary?.week)
                 )
@@ -183,9 +183,9 @@ private struct LimitCard: View {
 
     private var message: String {
         switch state {
-        case .loading: return "Carregando…"
+        case .loading: return tr("Carregando…", "Loading…")
         case .unavailable(let reason): return reason
-        case .available: return "Sem dados desta janela"
+        case .available: return tr("Sem dados desta janela", "No data for this window")
         }
     }
 }
@@ -263,7 +263,7 @@ private struct ModelUsageSection: View {
             Slice(id: model.name, name: ModelName.display(model.name), share: value(model) / total, color: palette[index])
         }
         let rest = models.dropFirst(3).reduce(0) { $0 + value($1) }
-        if rest > 0 { result.append(Slice(id: "others", name: "Outros", share: rest / total, color: palette[3])) }
+        if rest > 0 { result.append(Slice(id: "others", name: tr("Outros", "Others"), share: rest / total, color: palette[3])) }
         return result
     }
 
@@ -279,9 +279,9 @@ private struct ModelUsageSection: View {
     }
 
     var body: some View {
-        Card(title: "Por modelo", trailing: capsText.map { "Limite: \($0)" } ?? "7 dias") {
+        Card(title: tr("Por modelo", "By model"), trailing: capsText.map { tr("Limite: \($0)", "Limit: \($0)") } ?? tr("7 dias", "7 days")) {
             if slices.isEmpty {
-                Text("Sem uso nos últimos 7 dias")
+                Text(tr("Sem uso nos últimos 7 dias", "No usage in the last 7 days"))
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.4))
             } else {
@@ -330,18 +330,23 @@ enum UsageFormat {
     static func ageSuffix(since fetched: Date, now: Date) -> String {
         let minutes = Int(now.timeIntervalSince(fetched) / 60)
         guard minutes >= 4 else { return "" }
-        return minutes >= 60 ? " · há \(minutes / 60) h" : " · há \(minutes) min"
+        return minutes >= 60
+            ? tr(" · há \(minutes / 60) h", " · \(minutes / 60) h ago")
+            : tr(" · há \(minutes) min", " · \(minutes) min ago")
     }
 
     static func weekday(of date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "pt_BR")
-        formatter.setLocalizedDateFormatFromTemplate("EEE HH:mm")
-        return "reinicia \(formatter.string(from: date))"
+        formatter.locale = Locale(identifier: Localization.current == .pt ? "pt_BR" : "en_US")
+        formatter.setLocalizedDateFormatFromTemplate(Localization.current == .pt ? "EEE HH:mm" : "EEE h:mm a")
+        let when = formatter.string(from: date)
+        return tr("reinicia \(when)", "resets \(when)")
     }
 
     static func remaining(until end: Date, now: Date) -> String {
         let minutes = max(0, Int(end.timeIntervalSince(now) / 60))
-        return minutes >= 60 ? "reinicia em \(minutes / 60)h \(minutes % 60)min" : "reinicia em \(minutes)min"
+        return minutes >= 60
+            ? tr("reinicia em \(minutes / 60)h \(minutes % 60)min", "resets in \(minutes / 60)h \(minutes % 60)min")
+            : tr("reinicia em \(minutes)min", "resets in \(minutes)min")
     }
 }

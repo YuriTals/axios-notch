@@ -73,7 +73,7 @@ struct TerminalPanelView: View {
                         .foregroundStyle(.white.opacity(0.6))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Fechar painel")
+                .accessibilityLabel(tr("Fechar painel", "Close panel"))
             }
             .padding(8)
 
@@ -136,7 +136,7 @@ private struct SessionTab: View {
                         .background(Circle().fill(.white.opacity(0.12)))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Encerrar sessão")
+                .accessibilityLabel(tr("Encerrar sessão", "End session"))
             }
         }
         .foregroundStyle(.white.opacity(isSelected ? 0.95 : 0.6))
@@ -169,13 +169,13 @@ private struct NewSessionButton: View {
 
     var body: some View {
         Menu {
-            Button("Nova sessão") { store.openSession(provider, directory: nil) }
+            Button(tr("Nova sessão", "New session")) { store.openSession(provider, directory: nil) }
             if let folder = currentFolder {
-                Button("Na mesma pasta (\(ProcessDirectory.projectName(forPath: folder) ?? ""))") {
+                Button(tr("Na mesma pasta (\(ProcessDirectory.projectName(forPath: folder) ?? ""))", "In the same folder (\(ProcessDirectory.projectName(forPath: folder) ?? ""))")) {
                     store.openSession(provider, directory: folder)
                 }
             }
-            Button("Escolher pasta…") { chooseFolder() }
+            Button(tr("Escolher pasta…", "Choose folder…")) { chooseFolder() }
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 9, weight: .bold))
@@ -188,8 +188,8 @@ private struct NewSessionButton: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(atLimit)
-        .help(atLimit ? "Limite de \(SessionKey.maxPerProvider) sessões" : "Nova sessão")
-        .accessibilityLabel("Nova sessão")
+        .help(atLimit ? tr("Limite de \(SessionKey.maxPerProvider) sessões", "Limit of \(SessionKey.maxPerProvider) sessions") : tr("Nova sessão", "New session"))
+        .accessibilityLabel(tr("Nova sessão", "New session"))
     }
 
     private func chooseFolder() {
@@ -197,8 +197,8 @@ private struct NewSessionButton: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "Abrir aqui"
-        panel.message = "Escolha a pasta em que a nova sessão vai começar"
+        panel.prompt = tr("Abrir aqui", "Open here")
+        panel.message = tr("Escolha a pasta em que a nova sessão vai começar", "Choose the folder the new session will start in")
         panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
         NSApp.activate(ignoringOtherApps: true)
         panel.begin { response in

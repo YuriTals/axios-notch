@@ -7,7 +7,7 @@ struct NotchPickerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Ferramentas ativas")
+            Text(tr("Ferramentas ativas", "Active tools"))
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.45))
                 .padding(.leading, 4)
@@ -54,7 +54,7 @@ private struct GearButton: View {
                 .background(Circle().fill(.white.opacity(hovering ? 0.2 : 0.09)))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Ajustes")
+        .accessibilityLabel(tr("Ajustes", "Settings"))
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.15), value: hovering)
     }

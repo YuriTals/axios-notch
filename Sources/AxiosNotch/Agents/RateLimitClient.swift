@@ -29,7 +29,7 @@ enum RateLimitClient {
         } catch let failure as Failure {
             return Result(state: .unavailable(failure.message), succeeded: false, retryAfter: failure.retryAfter)
         } catch {
-            return Result(state: .unavailable("Sem conexão com \(provider.displayName)"), succeeded: false, retryAfter: nil)
+            return Result(state: .unavailable(tr("Sem conexão com \(provider.displayName)", "Can't reach \(provider.displayName)")), succeeded: false, retryAfter: nil)
         }
     }
 
@@ -37,10 +37,10 @@ enum RateLimitClient {
 
     private static func fetchClaude() async throws -> AgentRateLimits {
         guard let creds = claudeCredentials() else {
-            throw Failure(message: "Entre no Claude Code para ver o limite")
+            throw Failure(message: tr("Entre no Claude Code para ver o limite", "Sign in to Claude Code to see the limit"))
         }
         if let expiresAt = creds.expiresAt, expiresAt <= Date().timeIntervalSince1970 * 1000 {
-            throw Failure(message: "Sessão expirada — abra o Claude Code para renovar")
+            throw Failure(message: tr("Sessão expirada — abra o Claude Code para renovar", "Session expired — open Claude Code to renew"))
         }
         var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!, timeoutInterval: 15)
         request.setValue("Bearer \(creds.accessToken)", forHTTPHeaderField: "Authorization")
@@ -48,7 +48,7 @@ enum RateLimitClient {
         request.setValue("axios-notch", forHTTPHeaderField: "User-Agent")
         let json = try await jsonResponse(for: request, provider: "Claude Code")
         guard let limits = RateLimitParser.claude(json, plan: creds.plan) else {
-            throw Failure(message: "Resposta inesperada do Claude")
+            throw Failure(message: tr("Resposta inesperada do Claude", "Unexpected response from Claude"))
         }
         return limits
     }
@@ -103,7 +103,7 @@ enum RateLimitClient {
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tokens = root["tokens"] as? [String: Any],
               let accessToken = tokens["access_token"] as? String, !accessToken.isEmpty
-        else { throw Failure(message: "Entre no Codex para ver o limite") }
+        else { throw Failure(message: tr("Entre no Codex para ver o limite", "Sign in to Codex to see the limit")) }
 
         var request = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/wham/usage")!, timeoutInterval: 15)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -114,7 +114,7 @@ enum RateLimitClient {
         }
         let json = try await jsonResponse(for: request, provider: "Codex")
         guard let limits = RateLimitParser.codex(json) else {
-            throw Failure(message: "Resposta inesperada do Codex")
+            throw Failure(message: tr("Resposta inesperada do Codex", "Unexpected response from Codex"))
         }
         return limits
     }
@@ -136,14 +136,14 @@ enum RateLimitClient {
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 401 || status == 403 {
-            throw Failure(message: "Sessão expirada — abra o \(provider) para renovar")
+            throw Failure(message: tr("Sessão expirada — abra o \(provider) para renovar", "Session expired — open \(provider) to renew"))
         }
         if status == 429 {
             let wait = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
-            throw Failure(message: "\(provider) limitou as consultas", retryAfter: wait)
+            throw Failure(message: tr("\(provider) limitou as consultas", "\(provider) rate-limited the requests"), retryAfter: wait)
         }
         guard (200..<300).contains(status) else {
-            throw Failure(message: "\(provider) respondeu \(status)")
+            throw Failure(message: tr("\(provider) respondeu \(status)", "\(provider) responded \(status)"))
         }
         return try JSONSerialization.jsonObject(with: data)
     }

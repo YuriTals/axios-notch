@@ -38,18 +38,20 @@ final class LimitAlertTests: XCTestCase {
     }
 
     func testReportsWhenAHighWindowStartsOverButStaysQuietIfItWasLow() {
-        var tracker = LimitAlertTracker()
-        _ = tracker.observe(provider: .claude, window: .fiveHour, limit: limit(70))
-        _ = tracker.observe(provider: .claude, window: .fiveHour, limit: limit(88))               // crosses 80
-        let next = reset.addingTimeInterval(5 * 3600)
-        let alert = tracker.observe(provider: .claude, window: .fiveHour, limit: limit(2, resets: next))
-        XCTAssertEqual(alert?.kind, .reset)
-        XCTAssertEqual(alert?.message, "Claude: janela de 5h reiniciou!")
+        withLanguage(.pt) {
+            var tracker = LimitAlertTracker()
+            _ = tracker.observe(provider: .claude, window: .fiveHour, limit: limit(70))
+            _ = tracker.observe(provider: .claude, window: .fiveHour, limit: limit(88))               // crosses 80
+            let next = reset.addingTimeInterval(5 * 3600)
+            let alert = tracker.observe(provider: .claude, window: .fiveHour, limit: limit(2, resets: next))
+            XCTAssertEqual(alert?.kind, .reset)
+            XCTAssertEqual(alert?.message, "Claude: janela de 5h reiniciou!")
 
-        // A window that never got high resets without a word.
-        var quiet = LimitAlertTracker()
-        _ = quiet.observe(provider: .claude, window: .weekly, limit: limit(30))
-        XCTAssertNil(quiet.observe(provider: .claude, window: .weekly, limit: limit(1, resets: next)))
+            // A window that never got high resets without a word.
+            var quiet = LimitAlertTracker()
+            _ = quiet.observe(provider: .claude, window: .weekly, limit: limit(30))
+            XCTAssertNil(quiet.observe(provider: .claude, window: .weekly, limit: limit(1, resets: next)))
+        }
     }
 
     func testAfterAResetTheThresholdsAreArmedAgain() {
@@ -78,10 +80,12 @@ final class LimitAlertTests: XCTestCase {
     }
 
     func testMessagesReadNaturally() {
-        let a = LimitAlert(provider: .claude, window: .fiveHour, kind: .threshold(80), percent: 82.4)
-        XCTAssertEqual(a.message, "Claude: 82% da janela de 5h")
-        let b = LimitAlert(provider: .codex, window: .weekly, kind: .threshold(90), percent: 91)
-        XCTAssertEqual(b.message, "Codex: 91% do limite semanal!")
-        XCTAssertEqual(LimitAlert(provider: .codex, window: .weekly, kind: .reset, percent: 0).message, "Codex: limite semanal reiniciou!")
+        withLanguage(.pt) {
+            let a = LimitAlert(provider: .claude, window: .fiveHour, kind: .threshold(80), percent: 82.4)
+            XCTAssertEqual(a.message, "Claude: 82% da janela de 5h")
+            let b = LimitAlert(provider: .codex, window: .weekly, kind: .threshold(90), percent: 91)
+            XCTAssertEqual(b.message, "Codex: 91% do limite semanal!")
+            XCTAssertEqual(LimitAlert(provider: .codex, window: .weekly, kind: .reset, percent: 0).message, "Codex: limite semanal reiniciou!")
+        }
     }
 }

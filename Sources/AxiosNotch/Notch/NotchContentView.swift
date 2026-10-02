@@ -174,6 +174,6 @@ private struct NoticeBanner: View {
         .padding(.horizontal, 12)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
-        .accessibilityHint("Abre o terminal")
+        .accessibilityHint(tr("Abre o terminal", "Opens the terminal"))
     }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 
 /// Runs as an accessory app (no Dock icon) — the notch panel is the main UI,
 /// but a small menu bar item gives the user a conventional way to pause or
@@ -10,6 +11,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var pauseMenuItem: NSMenuItem?
     private var isPaused = false
+    private var settingsMenuItem: NSMenuItem?
+    private var quitMenuItem: NSMenuItem?
+    private var languageObserver: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -41,23 +45,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
 
-        let settingsItem = NSMenuItem(title: "Ajustes…", action: #selector(openSettings), keyEquivalent: ",")
+        let settingsItem = NSMenuItem(title: tr("Ajustes…", "Settings…"), action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
+        settingsMenuItem = settingsItem
 
-        let pauseItem = NSMenuItem(title: "Pausar", action: #selector(togglePause), keyEquivalent: "")
+        let pauseItem = NSMenuItem(title: tr("Pausar", "Pause"), action: #selector(togglePause), keyEquivalent: "")
         pauseItem.target = self
         menu.addItem(pauseItem)
         pauseMenuItem = pauseItem
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Sair do Axios Notch", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: tr("Sair do Axios Notch", "Quit Axios Notch"), action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
+        quitMenuItem = quitItem
+
+        // Re-title the menu the moment the language changes.
+        languageObserver = AppSettings.shared.$language
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.refreshMenuTitles() }
 
         item.menu = menu
         statusItem = item
+    }
+
+    private func refreshMenuTitles() {
+        settingsMenuItem?.title = tr("Ajustes…", "Settings…")
+        quitMenuItem?.title = tr("Sair do Axios Notch", "Quit Axios Notch")
+        pauseMenuItem?.title = isPaused ? tr("Retomar", "Resume") : tr("Pausar", "Pause")
     }
 
     @objc private func togglePause() {
@@ -65,11 +83,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if isPaused {
             notchController?.pause()
             usageStore?.stop()
-            pauseMenuItem?.title = "Retomar"
+            pauseMenuItem?.title = tr("Retomar", "Resume")
         } else {
             notchController?.resume()
             usageStore?.start()
-            pauseMenuItem?.title = "Pausar"
+            pauseMenuItem?.title = tr("Pausar", "Pause")
         }
     }
 
