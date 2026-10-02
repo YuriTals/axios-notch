@@ -1,234 +1,24 @@
 import SwiftUI
 import SwiftTerm
 
-/// A terminal view that reports when the user submits a line and when the
-/// process prints, which is all `ResponseTracker` needs.
-private final class ActivityTerminalView: LocalProcessTerminalView {
-    var onSubmit: (() -> Void)?
-    var onOutput: (() -> Void)?
-
-    override func send(source: TerminalView, data: ArraySlice<UInt8>) {
-        if data.contains(0x0D) { onSubmit?() }
-        super.send(source: source, data: data)
-    }
-
-    override func dataReceived(slice: ArraySlice<UInt8>) {
-        super.dataReceived(slice: slice)
-        onOutput?()
-    }
-}
-
-/// Something the closed notch announces by growing a banner: an answer that
-/// finished while the user was away, or a plan limit getting close.
-struct NotchNotice: Equatable {
-    enum Level: Equatable { case info, warning, critical }
-    /// What clicking the banner does.
-    enum Action: Equatable { case openTerminal, openUsage }
-
-    /// `nil` is the clean shell.
-    let provider: AgentProvider?
-    /// Folder the session was working in, when it says anything useful.
-    let project: String?
-    /// What the notch says about it ("Te respondi aqui!").
-    let phrase: String
-    var level: Level = .info
-    var action: Action = .openTerminal
-    let id = UUID()
-}
-
-/// Keeps each terminal alive after its panel closes. SwiftUI destroys a
-/// view when its state leaves the screen, which would kill the process and
-/// lose the conversation; here the `LocalProcessTerminalView` (and the PTY
-/// process behind it) outlives the view and is simply re-attached next time.
-/// One session per provider, plus one for the clean shell. A session whose
-/// process has exited is dropped, so the next open starts fresh.
-///
-/// It also publishes what each session is doing for the notch to show: which
-/// are alive, which are busy answering, and how many answers finished while
-/// nobody was looking at that terminal.
-final class TerminalSessionStore: ObservableObject {
-    static let shared = TerminalSessionStore()
-
-    @Published private(set) var activeKeys: Set<String> = []
-    @Published private(set) var workingKeys: Set<String> = []
-    /// Finished answers the user has not seen yet, per session.
-    @Published private(set) var unread: [String: Int] = [:]
-    /// The most recent unseen finish, for the notch to announce.
-    @Published private(set) var lastFinish: NotchNotice?
-
-    private var lastPhrase: String?
-
-    /// The session whose terminal is currently on screen, if any.
-    private var visibleKey: String?
-
-    static func key(for provider: AgentProvider?) -> String { provider?.rawValue ?? "shell" }
-
-    func isActive(_ provider: AgentProvider?) -> Bool { activeKeys.contains(Self.key(for: provider)) }
-    func isWorking(_ provider: AgentProvider?) -> Bool { workingKeys.contains(Self.key(for: provider)) }
-    func unreadCount(_ provider: AgentProvider?) -> Int { unread[Self.key(for: provider)] ?? 0 }
-    var anyWorking: Bool { !workingKeys.isEmpty }
-    var totalUnread: Int { unread.values.reduce(0, +) }
-
-    private final class Session: LocalProcessTerminalViewDelegate {
-        let view = ActivityTerminalView(frame: .zero)
-        var tracker: ResponseTracker
-        let mode: ResponseTracker.Mode
-        var timer: Timer?
-        var onExit: (() -> Void)?
-        var onChange: (() -> Void)?
-        var onFinished: (() -> Void)?
-
-        init(mode: ResponseTracker.Mode) {
-            self.mode = mode
-            tracker = ResponseTracker(mode: mode)
-        }
-
-        func startPolling() {
-            guard timer == nil else { return }
-            timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in self?.poll() }
-        }
-
-        private func poll() {
-            let busy = mode == .foreground ? foregroundBusy() : false
-            let marker = mode == .marker ? screenShowsWorkingMarker() : false
-            let wasWorking = tracker.isWorking
-            let event = tracker.tick(now: Date(), foregroundBusy: busy, markerVisible: marker)
-            if wasWorking != tracker.isWorking || event != nil { onChange?() }
-            if event == .finished { onFinished?() }
-            if !tracker.needsPolling { timer?.invalidate(); timer = nil }
-        }
-
-        /// Is something other than the login shell in the terminal's
-        /// foreground? (Only consulted for the clean-shell session.)
-        private func foregroundBusy() -> Bool {
-            guard let process = view.process, process.running else { return false }
-            let group = tcgetpgrp(process.childfd)
-            return group > 0 && group != process.shellPid
-        }
-
-        /// Codex prints "esc to interrupt" on screen only while it works.
-        private func screenShowsWorkingMarker() -> Bool {
-            let terminal = view.getTerminal()
-            for row in 0..<terminal.rows {
-                let text = terminal.getLine(row: row)?.translateToString(trimRight: true) ?? ""
-                if text.localizedCaseInsensitiveContains("esc to interrupt") { return true }
-            }
-            return false
-        }
-
-        /// The project folder this session is in right now. A shell's own
-        /// directory is the one to read (its builtin `cd` changes it); a CLI
-        /// session keeps the directory it was started in.
-        func projectName() -> String? {
-            guard let process = view.process, process.running else { return nil }
-            return ProcessDirectory.current(pid: process.shellPid).flatMap { ProcessDirectory.projectName(forPath: $0) }
-        }
-
-        func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
-        func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
-        func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-        func processTerminated(source: TerminalView, exitCode: Int32?) {
-            DispatchQueue.main.async { [onExit] in onExit?() }
-        }
-    }
-
-    private var sessions: [String: Session] = [:]
-
-    func view(for provider: AgentProvider?) -> LocalProcessTerminalView {
-        let key = Self.key(for: provider)
-        if let existing = sessions[key] { return existing.view }
-
-        let mode: ResponseTracker.Mode
-        switch provider {
-        case nil: mode = .foreground
-        case .claude: mode = .silence
-        case .codex: mode = .marker
-        }
-        let session = Session(mode: mode)
-        session.view.font = TerminalFont.resolve()
-        session.view.processDelegate = session
-        session.view.onSubmit = { [weak session] in
-            guard let session else { return }
-            session.tracker.userSubmitted(now: Date())
-            session.startPolling()
-        }
-        session.view.onOutput = { [weak session] in
-            guard let session else { return }
-            let wasWorking = session.tracker.isWorking
-            session.tracker.outputReceived(now: Date())
-            if !wasWorking && session.tracker.isWorking { session.onChange?() }
-        }
-        session.onChange = { [weak self, weak session] in
-            guard let self, let session else { return }
-            self.setWorking(session.tracker.isWorking, key: key)
-        }
-        session.onFinished = { [weak self, weak session] in
-            guard let self, self.visibleKey != key else { return }
-            self.unread[key, default: 0] += 1
-            let phrase = PhraseBook.pick(forShell: provider == nil, avoiding: self.lastPhrase)
-            self.lastPhrase = phrase
-            self.lastFinish = NotchNotice(provider: provider, project: session?.projectName(), phrase: phrase)
-        }
-        session.onExit = { [weak self, weak session] in
-            // Only drop it if it is still the current session for this key.
-            guard let self, let session, self.sessions[key] === session else { return }
-            session.timer?.invalidate()
-            session.tracker.reset()
-            self.sessions[key] = nil
-            self.activeKeys.remove(key)
-            self.workingKeys.remove(key)
-            self.unread[key] = nil
-        }
-        let (executable, args) = PTYSession.launchArguments(for: provider)
-        // Start in the home folder: a packaged .app inherits "/" as its directory.
-        session.view.startProcess(executable: executable, args: args, currentDirectory: NSHomeDirectory())
-        if mode == .marker { session.startPolling() }
-        sessions[key] = session
-        // Created during a SwiftUI update, so publish on the next turn.
-        DispatchQueue.main.async { [weak self] in self?.activeKeys.insert(key) }
-        return session.view
-    }
-
-    /// Applies the current font size to every live terminal.
-    func refreshFonts() {
-        for session in sessions.values { session.view.font = TerminalFont.resolve() }
-    }
-
-    /// The terminal for `provider` appeared on screen: whatever finished
-    /// while away is now seen.
-    func didShow(_ provider: AgentProvider?) {
-        let key = Self.key(for: provider)
-        visibleKey = key
-        DispatchQueue.main.async { [weak self] in self?.unread[key] = nil }
-    }
-
-    func didHide(view: NSView) {
-        guard let key = sessions.first(where: { $0.value.view === view })?.key else { return }
-        if visibleKey == key { visibleKey = nil }
-    }
-
-    private func setWorking(_ working: Bool, key: String) {
-        if working { workingKeys.insert(key) } else { workingKeys.remove(key) }
-    }
-}
-
 /// Bridges SwiftTerm's `LocalProcessTerminalView` (a real VT100 emulator with
 /// its own PTY) into SwiftUI. The terminal itself comes from
-/// `TerminalSessionStore`, so closing and reopening the panel returns to the
-/// same running session.
+/// `TerminalSessionStore`, so closing and reopening the panel, or switching
+/// tabs, returns to the same running session.
 struct TerminalRepresentable: NSViewRepresentable {
-    /// `nil` is the clean shell instead of a provider CLI.
-    let provider: AgentProvider?
+    let key: SessionKey
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
-        let view = TerminalSessionStore.shared.view(for: provider)
+        // The store always has the view for a selected key; the placeholder
+        // only exists so a stale key can never crash the panel.
+        let view = TerminalSessionStore.shared.view(for: key) ?? LocalProcessTerminalView(frame: .zero)
         view.removeFromSuperview()
-        TerminalSessionStore.shared.didShow(provider)
+        TerminalSessionStore.shared.didShow(key)
         return view
     }
 
     static func dismantleNSView(_ nsView: LocalProcessTerminalView, coordinator: ()) {
-        // The provider isn't available here; the store clears by view identity.
+        // The key isn't available here; the store clears by view identity.
         TerminalSessionStore.shared.didHide(view: nsView)
     }
 
@@ -259,31 +49,161 @@ enum TerminalFont {
     }
 }
 
+/// The terminal panel: a tab bar for this tool's sessions on top, the
+/// selected terminal below.
 struct TerminalPanelView: View {
     let provider: AgentProvider?
     let onClose: () -> Void
+    @ObservedObject private var store = TerminalSessionStore.shared
+
+    private var selected: SessionKey? { store.selectedKey(for: provider) }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 8) {
                 if let provider {
                     ProviderGlyph(provider: provider, size: 14)
                 } else {
                     TerminalIcon().frame(width: 14, height: 14)
                 }
-                Text(provider?.displayName ?? "Terminal")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.7))
-                Spacer()
+                SessionTabs(provider: provider)
+                Spacer(minLength: 4)
                 Button(action: onClose) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.white.opacity(0.6))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Fechar painel")
             }
             .padding(8)
 
-            TerminalRepresentable(provider: provider)
+            if let selected {
+                // `.id` makes switching tabs a fresh representable, so the right
+                // terminal is attached and marked as seen.
+                TerminalRepresentable(key: selected)
+                    .id(selected.id)
+            }
+        }
+        // Last tab ended (`exit`, or closed with ×): nothing left to show.
+        .onChange(of: selected) { _, newValue in
+            if newValue == nil { onClose() }
+        }
+    }
+}
+
+/// One chip per open session of this tool, plus "+" to open another.
+private struct SessionTabs: View {
+    let provider: AgentProvider?
+    @ObservedObject private var store = TerminalSessionStore.shared
+
+    var body: some View {
+        HStack(spacing: 5) {
+            // Project folders can change under a shell (`cd`), so refresh the names.
+            TimelineView(.periodic(from: .now, by: 2)) { _ in
+                HStack(spacing: 5) {
+                    ForEach(store.keys(for: provider), id: \.id) { key in
+                        SessionTab(key: key, isSelected: key == store.selectedKey(for: provider))
+                    }
+                }
+            }
+            NewSessionButton(provider: provider)
+        }
+    }
+}
+
+private struct SessionTab: View {
+    let key: SessionKey
+    let isSelected: Bool
+    @ObservedObject private var store = TerminalSessionStore.shared
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(store.title(for: key))
+                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                .lineLimit(1)
+                .frame(maxWidth: 110)
+            if store.isWorking(key) {
+                BouncingDots(dot: 2.5)
+            } else if store.unreadCount(key) > 0 {
+                UnreadBadge(count: store.unreadCount(key), size: 12)
+            }
+            if isSelected || hovering {
+                Button { store.close(key) } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .frame(width: 12, height: 12)
+                        .background(Circle().fill(.white.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Encerrar sessão")
+            }
+        }
+        .foregroundStyle(.white.opacity(isSelected ? 0.95 : 0.6))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(.white.opacity(isSelected ? 0.16 : (hovering ? 0.1 : 0.06))))
+        .contentShape(Capsule())
+        .onTapGesture { store.select(key) }
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+/// "+" — a fresh session in the home folder, in the current tab's folder, or in
+/// a folder you pick.
+private struct NewSessionButton: View {
+    let provider: AgentProvider?
+    @ObservedObject private var store = TerminalSessionStore.shared
+
+    private var atLimit: Bool { store.keys(for: provider).count >= SessionKey.maxPerProvider }
+
+    private var currentFolder: String? {
+        guard let key = store.selectedKey(for: provider),
+              let path = store.currentDirectory(for: key),
+              ProcessDirectory.projectName(forPath: path) != nil else { return nil }
+        return path
+    }
+
+    var body: some View {
+        Menu {
+            Button("Nova sessão") { store.openSession(provider, directory: nil) }
+            if let folder = currentFolder {
+                Button("Na mesma pasta (\(ProcessDirectory.projectName(forPath: folder) ?? ""))") {
+                    store.openSession(provider, directory: folder)
+                }
+            }
+            Button("Escolher pasta…") { chooseFolder() }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white.opacity(atLimit ? 0.25 : 0.7))
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(.white.opacity(0.08)))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(atLimit)
+        .help(atLimit ? "Limite de \(SessionKey.maxPerProvider) sessões" : "Nova sessão")
+        .accessibilityLabel("Nova sessão")
+    }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Abrir aqui"
+        panel.message = "Escolha a pasta em que a nova sessão vai começar"
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            DispatchQueue.main.async { store.openSession(provider, directory: url.path) }
         }
     }
 }

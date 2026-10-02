@@ -247,7 +247,10 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// that tool's usage.
     func activate(_ notice: NotchNotice) {
         switch notice.action {
-        case .openTerminal: openTerminal(for: notice.provider)
+        case .openTerminal:
+            // Land on the exact tab that answered.
+            if let id = notice.sessionID { TerminalSessionStore.shared.select(id: id) }
+            openTerminal(for: notice.provider)
         case .openUsage:
             if let provider = notice.provider { showUsage(for: provider) } else { showPicker() }
         }
@@ -264,6 +267,9 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// Opens the terminal: running `provider`'s CLI, or a clean shell when
     /// `provider` is nil.
     func openTerminal(for provider: AgentProvider?) {
+        // Make sure the tool has a tab to show (the first one is created here,
+        // never from inside the view).
+        TerminalSessionStore.shared.ensureSelected(provider)
         if case .terminal = state {} else { stateBeforeTerminal = state }
         setState(.terminal(provider))
     }

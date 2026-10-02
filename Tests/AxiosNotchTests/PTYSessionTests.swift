@@ -18,9 +18,12 @@ final class PTYSessionTests: XCTestCase {
     }
 
     func testSessionKeysAreStableAndDistinct() {
-        XCTAssertEqual(TerminalSessionStore.key(for: nil), "shell")
-        XCTAssertEqual(TerminalSessionStore.key(for: .claude), "claude")
-        XCTAssertNotEqual(TerminalSessionStore.key(for: .claude), TerminalSessionStore.key(for: .codex))
+        XCTAssertEqual(SessionKey(provider: nil, number: 1).id, "shell#1")
+        XCTAssertEqual(SessionKey(provider: .claude, number: 2).id, "claude#2")
+        XCTAssertNotEqual(SessionKey(provider: .claude, number: 1), SessionKey(provider: .claude, number: 2))
+        XCTAssertNotEqual(SessionKey(provider: .claude, number: 1), SessionKey(provider: .codex, number: 1))
+        XCTAssertEqual(SessionKey(provider: .codex, number: 3).fallbackTitle, "Codex 3")
+        XCTAssertEqual(SessionKey(provider: nil, number: 1).fallbackTitle, "Terminal 1")
     }
 
     func testUsageFormatting() {
