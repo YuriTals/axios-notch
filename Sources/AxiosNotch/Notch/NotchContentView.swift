@@ -5,7 +5,7 @@ import SwiftUI
 /// files in a resource bundle, so a `.process()`-ed PNG has to be loaded via
 /// `NSImage` instead.
 private let axiosMark: NSImage? = {
-    guard let url = Bundle.module.url(forResource: "AxiosMark", withExtension: "png") else { return nil }
+    guard let url = AppResources.url(forResource: "AxiosMark", withExtension: "png") else { return nil }
     return NSImage(contentsOf: url)
 }()
 

@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setUpStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = item.button {
-            if let url = Bundle.module.url(forResource: "AxiosMark", withExtension: "png"),
+            if let url = AppResources.url(forResource: "AxiosMark", withExtension: "png"),
                let image = NSImage(contentsOf: url) {
                 image.isTemplate = true
                 image.size = NSSize(width: 16, height: 16)
