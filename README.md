@@ -11,7 +11,14 @@ shell) sem tirar você do que está fazendo e **avisa quando uma resposta termin
 Requer macOS 14 ou superior. O app não tem ícone no Dock: ele vive no notch e num ícone
 (asterisco) na barra de menus.
 
-<!-- Capturas de tela: docs/screenshots/ (seletor, uso, terminal, ajustes) -->
+<p align="center">
+  <img src="docs/screenshots/seletor.png" width="420" alt="Seletor Ferramentas ativas">
+  <img src="docs/screenshots/uso.png" width="420" alt="Uso do plano do Claude">
+</p>
+<p align="center">
+  <img src="docs/screenshots/terminal.png" width="420" alt="Terminal dentro do notch">
+  <img src="docs/screenshots/ajustes-experiencia.png" width="420" alt="Ajustes: Experiência">
+</p>
 
 ## O que ele faz
 
