@@ -95,11 +95,11 @@ struct NotchContentView: View {
             closedCore
                 .frame(width: controller.notchStripSize.width, height: controller.notchStripSize.height)
             if let notice = controller.banner {
-                FinishBanner(notice: notice)
+                NoticeBanner(notice: notice)
                     .frame(height: NotchWindowController.bannerHeight)
                     .contentShape(Rectangle())
                     // Jump straight to the terminal that just answered.
-                    .onTapGesture { controller.openTerminal(for: notice.provider) }
+                    .onTapGesture { controller.activate(notice) }
                     .transition(.opacity.animation(.easeOut(duration: 0.2).delay(0.12)))
             }
         }
@@ -135,11 +135,20 @@ struct NotchContentView: View {
 }
 
 /// "Answer ready" announcement shown below the notch: who answered.
-private struct FinishBanner: View {
-    let notice: FinishNotice
+private struct NoticeBanner: View {
+    let notice: NotchNotice
     private var provider: AgentProvider? { notice.provider }
 
     private var tint: Color { provider.map(NotchTheme.accent(for:)) ?? .white }
+
+    /// Amber for "getting close", red for "almost out"; otherwise the tool's colour.
+    private var dotColor: Color {
+        switch notice.level {
+        case .info: return tint
+        case .warning: return Color(red: 0.97, green: 0.68, blue: 0.25)
+        case .critical: return Color(red: 0.95, green: 0.33, blue: 0.30)
+        }
+    }
 
     var body: some View {
         HStack(spacing: 7) {
@@ -160,7 +169,7 @@ private struct FinishBanner: View {
             }
             .lineLimit(1)
             .truncationMode(.middle)
-            Circle().fill(tint).frame(width: 5, height: 5)
+            Circle().fill(dotColor).frame(width: 5, height: 5)
         }
         .padding(.horizontal, 12)
         .accessibilityElement(children: .combine)

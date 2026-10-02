@@ -18,14 +18,21 @@ private final class ActivityTerminalView: LocalProcessTerminalView {
     }
 }
 
-/// An answer that finished while the user was not looking at that terminal.
-struct FinishNotice: Equatable {
+/// Something the closed notch announces by growing a banner: an answer that
+/// finished while the user was away, or a plan limit getting close.
+struct NotchNotice: Equatable {
+    enum Level: Equatable { case info, warning, critical }
+    /// What clicking the banner does.
+    enum Action: Equatable { case openTerminal, openUsage }
+
     /// `nil` is the clean shell.
     let provider: AgentProvider?
     /// Folder the session was working in, when it says anything useful.
     let project: String?
     /// What the notch says about it ("Te respondi aqui!").
     let phrase: String
+    var level: Level = .info
+    var action: Action = .openTerminal
     let id = UUID()
 }
 
@@ -47,7 +54,7 @@ final class TerminalSessionStore: ObservableObject {
     /// Finished answers the user has not seen yet, per session.
     @Published private(set) var unread: [String: Int] = [:]
     /// The most recent unseen finish, for the notch to announce.
-    @Published private(set) var lastFinish: FinishNotice?
+    @Published private(set) var lastFinish: NotchNotice?
 
     private var lastPhrase: String?
 
@@ -160,7 +167,7 @@ final class TerminalSessionStore: ObservableObject {
             self.unread[key, default: 0] += 1
             let phrase = PhraseBook.pick(forShell: provider == nil, avoiding: self.lastPhrase)
             self.lastPhrase = phrase
-            self.lastFinish = FinishNotice(provider: provider, project: session?.projectName(), phrase: phrase)
+            self.lastFinish = NotchNotice(provider: provider, project: session?.projectName(), phrase: phrase)
         }
         session.onExit = { [weak self, weak session] in
             // Only drop it if it is still the current session for this key.

@@ -19,6 +19,9 @@ final class AgentUsageStore: ObservableObject {
     /// be polling the same token.
     private let limitsInterval: TimeInterval = 120
     private var backoff: [AgentProvider: LimitBackoff] = [:]
+    private var alertTracker = LimitAlertTracker()
+    /// Fires when a limit crosses 80 %/90 % or a high window starts over.
+    let alerts = PassthroughSubject<LimitAlert, Never>()
 
     init(refreshInterval: TimeInterval = 5) {
         self.refreshInterval = refreshInterval
@@ -61,6 +64,16 @@ final class AgentUsageStore: ObservableObject {
 
     /// Asks each provider for its real plan usage. A failed fetch keeps the
     /// last good numbers on screen unless there never were any.
+    private func checkAlerts(for provider: AgentProvider, limits: AgentRateLimits) {
+        let windows: [(LimitWindow, AgentLimit?)] = [(.fiveHour, limits.fiveHour), (.weekly, limits.weekly)]
+        for (window, limit) in windows {
+            guard let limit else { continue }
+            if let alert = alertTracker.observe(provider: provider, window: window, limit: limit) {
+                alerts.send(alert)
+            }
+        }
+    }
+
     private func refreshLimits() {
         for provider in AgentProvider.allCases {
             guard backoff[provider, default: LimitBackoff()].canFetch(now: Date()) else { continue }
@@ -74,7 +87,10 @@ final class AgentUsageStore: ObservableObject {
                     var policy = self.backoff[provider, default: LimitBackoff()]
                     if result.succeeded {
                         policy.succeeded(now: Date(), interval: self.limitsInterval)
-                        if case .available(let limits) = result.state { LimitCache.save(limits, for: provider) }
+                        if case .available(let limits) = result.state {
+                            LimitCache.save(limits, for: provider)
+                            self.checkAlerts(for: provider, limits: limits)
+                        }
                         self.limits[provider] = result.state
                     } else {
                         policy.failed(now: Date(), retryAfter: result.retryAfter)

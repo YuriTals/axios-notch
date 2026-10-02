@@ -31,13 +31,14 @@ final class NotchWindowController: NSObject, ObservableObject {
     @Published private(set) var state: NotchState = .closed
     /// Set for a few seconds when an answer finishes while the notch is
     /// closed; the closed notch grows downward to announce it.
-    @Published private(set) var banner: FinishNotice?
+    @Published private(set) var banner: NotchNotice?
     static let bannerHeight: CGFloat = 34
     static let bannerMinWidth: CGFloat = 270
     /// Wider when the banner also names the project.
     static let bannerProjectWidth: CGFloat = 350
     private var bannerDismiss: DispatchWorkItem?
     private var finishObserver: AnyCancellable?
+    private var alertObserver: AnyCancellable?
 
     /// Where the terminal's close button returns to.
     private var stateBeforeTerminal: NotchState = .picker
@@ -128,6 +129,13 @@ final class NotchWindowController: NSObject, ObservableObject {
         let content = NotchContentView(controller: self, usageStore: usageStore)
         let hostingView = NotchHostingView(rootView: content)
         panel.contentView = hostingView
+
+        alertObserver = usageStore.alerts
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] alert in
+                self?.announce(NotchNotice(provider: alert.provider, project: nil, phrase: alert.message,
+                                           level: alert.severity, action: .openUsage))
+            }
 
         finishObserver = TerminalSessionStore.shared.$lastFinish
             .compactMap { $0 }
@@ -235,6 +243,16 @@ final class NotchWindowController: NSObject, ObservableObject {
         setState(.settings)
     }
 
+    /// Clicking a banner: an answer opens its terminal, a limit warning opens
+    /// that tool's usage.
+    func activate(_ notice: NotchNotice) {
+        switch notice.action {
+        case .openTerminal: openTerminal(for: notice.provider)
+        case .openUsage:
+            if let provider = notice.provider { showUsage(for: provider) } else { showPicker() }
+        }
+    }
+
     func showPicker() {
         setState(.picker)
     }
@@ -256,8 +274,10 @@ final class NotchWindowController: NSObject, ObservableObject {
 
     /// Shows the "answer ready" banner for a few seconds, only while closed —
     /// an open panel already has the user's attention.
-    private func announce(_ notice: FinishNotice) {
-        guard state == .closed, AppSettings.shared.finishBanner else { return }
+    private func announce(_ notice: NotchNotice) {
+        // Limit warnings are always on; only the "answer ready" banner can be turned off.
+        let enabled = notice.action == .openUsage || AppSettings.shared.finishBanner
+        guard state == .closed, enabled else { return }
         bannerDismiss?.cancel()
         banner = notice
         updateMousePassthrough()
