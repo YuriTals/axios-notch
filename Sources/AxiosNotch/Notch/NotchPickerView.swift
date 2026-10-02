@@ -20,7 +20,7 @@ struct NotchPickerView: View {
                         controller.showUsage(for: provider)
                     }
                 }
-                ToolTile(title: "Terminal", tint: .white, provider: nil) {
+                ToolTile(title: "Terminal", tint: NotchTheme.appAccent, provider: nil) {
                     TerminalIcon().frame(width: 32, height: 32)
                 } action: {
                     controller.openTerminal(for: nil)

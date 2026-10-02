@@ -5,19 +5,21 @@ import SwiftUI
 /// them with snap (trackpad / wheel) and a rail of icons on the right to jump,
 /// like the iOS 26 Control Center.
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general
+    case general, appearance
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
         case .general: return "gearshape.fill"
+        case .appearance: return "paintpalette.fill"
         }
     }
 
     var title: String {
         switch self {
         case .general: return "Ajustes"
+        case .appearance: return "Aparência"
         }
     }
 }
@@ -71,7 +73,7 @@ struct NotchSettingsView: View {
         .font(.system(size: 12))
         .foregroundStyle(.white.opacity(0.9))
         .toggleStyle(.switch)
-        .tint(NotchTheme.claudeAccent)
+        .tint(settings.accent.color)
         .environment(\.colorScheme, .dark)
         .padding(.horizontal, 6)
         .padding(.bottom, 14)
@@ -82,6 +84,21 @@ struct NotchSettingsView: View {
     private func pageContent(_ page: SettingsPage) -> some View {
         switch page {
         case .general: generalPage
+        case .appearance: appearancePage
+        }
+    }
+
+    // A single block: the grid centres it on the page.
+    private var appearancePage: some View {
+        CardGridLayout {
+            SettingsCard(title: "Cor de destaque") {
+                HStack(spacing: 9) {
+                    ForEach(AccentChoice.allCases) { choice in
+                        AccentSwatch(choice: choice, isSelected: settings.accent == choice) { settings.accent = choice }
+                    }
+                }
+                Caption("Controles dos ajustes, tile do Terminal e o aviso dele. Claude e Codex mantêm as cores próprias.")
+            }
         }
     }
 
@@ -168,6 +185,28 @@ struct CardGridLayout: Layout {
     }
 }
 
+/// One round colour choice; the chosen one has a ring.
+private struct AccentSwatch: View {
+    let choice: AccentChoice
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Circle()
+                .fill(choice.color)
+                .frame(width: 22, height: 22)
+                .overlay(Circle().stroke(.white.opacity(isSelected ? 0.95 : 0), lineWidth: 2).padding(-4))
+                .frame(width: 30, height: 30)
+                .contentShape(Circle())
+                .animation(.easeOut(duration: 0.12), value: isSelected)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(choice.label)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
 /// The page dots: the current page is a bright pill, the others dim dots; tap
 /// one to jump there.
 private struct PageRail: View {
@@ -199,8 +238,11 @@ private struct PageRail: View {
 enum SettingsLayout {
     static let cardHeight: CGFloat = 138
     static let spacing: CGFloat = 10
-    /// One page = two rows of cards.
-    static let pageHeight: CGFloat = cardHeight * 2 + spacing
+    /// Two rows of cards.
+    static let gridHeight: CGFloat = cardHeight * 2 + spacing
+    /// One page: the grid plus a little air above and below, so the borders of
+    /// a neighbouring page never peek in at the seam while scrolling.
+    static let pageHeight: CGFloat = gridHeight + 6
 }
 
 struct SettingsCard<Content: View>: View {

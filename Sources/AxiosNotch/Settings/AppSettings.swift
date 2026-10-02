@@ -2,6 +2,36 @@ import AppKit
 import Combine
 import SwiftUI
 
+/// The app's own accent colour: settings controls, the Terminal tile and the
+/// terminal's "answer ready" dot. Claude and Codex keep their brand colours.
+enum AccentChoice: String, CaseIterable, Identifiable {
+    case orange, blue, green, purple, pink, gray
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .orange: return "Laranja"
+        case .blue: return "Azul"
+        case .green: return "Verde"
+        case .purple: return "Roxo"
+        case .pink: return "Rosa"
+        case .gray: return "Cinza"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .orange: return Color(red: 0.85, green: 0.47, blue: 0.34)
+        case .blue: return Color(red: 0.33, green: 0.58, blue: 0.96)
+        case .green: return Color(red: 0.30, green: 0.78, blue: 0.50)
+        case .purple: return Color(red: 0.66, green: 0.50, blue: 0.96)
+        case .pink: return Color(red: 0.95, green: 0.44, blue: 0.64)
+        case .gray: return Color(red: 0.66, green: 0.68, blue: 0.72)
+        }
+    }
+}
+
 /// How the notch treats motion (bouncing dots, springs, pulses).
 enum MotionPreference: String, CaseIterable, Identifiable {
     case system, reduce, full
@@ -43,6 +73,8 @@ final class AppSettings: ObservableObject {
     /// Why the last launch-at-login change failed, if it did.
     @Published private(set) var loginError: String?
 
+    @Published var accent: AccentChoice { didSet { defaults.set(accent.rawValue, forKey: "accent") } }
+
     @Published var motion: MotionPreference { didSet { defaults.set(motion.rawValue, forKey: "motion") } }
     @Published var hoverHaptic: Bool { didSet { defaults.set(hoverHaptic, forKey: "hoverHaptic") } }
     @Published var hapticStrength: HapticStrength { didSet { defaults.set(hapticStrength.rawValue, forKey: "hapticStrength") } }
@@ -58,6 +90,7 @@ final class AppSettings: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         launchAtLogin = LoginItem.isEnabled
+        accent = defaults.string(forKey: "accent").flatMap(AccentChoice.init) ?? .orange
         motion = defaults.string(forKey: "motion").flatMap(MotionPreference.init) ?? .system
         hoverHaptic = defaults.object(forKey: "hoverHaptic") as? Bool ?? true
         hapticStrength = (defaults.object(forKey: "hapticStrength") as? Int).flatMap(HapticStrength.init) ?? .strong

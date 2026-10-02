@@ -2,7 +2,7 @@ import XCTest
 @testable import AxiosNotch
 
 final class SettingsLayoutTests: XCTestCase {
-    private let page = CGSize(width: 440, height: SettingsLayout.pageHeight)
+    private let page = CGSize(width: 440, height: SettingsLayout.gridHeight)
     private let h = SettingsLayout.cardHeight
     private let gap = SettingsLayout.spacing
 
@@ -41,8 +41,9 @@ final class SettingsLayoutTests: XCTestCase {
         XCTAssertTrue(CardGridLayout.frames(count: 0, in: page).isEmpty)
     }
 
-    func testSettingsHaveASinglePageForNow() {
-        XCTAssertEqual(SettingsPage.allCases, [.general])
-        XCTAssertEqual(SettingsLayout.pageHeight, SettingsLayout.cardHeight * 2 + SettingsLayout.spacing)
+    func testSettingsPages() {
+        XCTAssertEqual(SettingsPage.allCases, [.general, .appearance])
+        XCTAssertEqual(SettingsLayout.gridHeight, SettingsLayout.cardHeight * 2 + SettingsLayout.spacing)
+        XCTAssertGreaterThan(SettingsLayout.pageHeight, SettingsLayout.gridHeight)       // room at the seam
     }
 }

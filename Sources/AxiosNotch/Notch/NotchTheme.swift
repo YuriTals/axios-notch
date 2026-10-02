@@ -5,6 +5,9 @@ enum NotchTheme {
     static let claudeAccent = Color(red: 0.85, green: 0.47, blue: 0.34)
     static let codexAccent = Color(red: 0.47, green: 0.55, blue: 1.0)
 
+    /// The app's own accent, chosen in the settings.
+    static var appAccent: Color { AppSettings.shared.accent.color }
+
     static func accent(for provider: AgentProvider) -> Color {
         switch provider {
         case .claude: return claudeAccent

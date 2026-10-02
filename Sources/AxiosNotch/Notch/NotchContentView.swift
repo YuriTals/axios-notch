@@ -139,7 +139,7 @@ private struct NoticeBanner: View {
     let notice: NotchNotice
     private var provider: AgentProvider? { notice.provider }
 
-    private var tint: Color { provider.map(NotchTheme.accent(for:)) ?? .white }
+    private var tint: Color { provider.map(NotchTheme.accent(for:)) ?? NotchTheme.appAccent }
 
     /// Amber for "getting close", red for "almost out"; otherwise the tool's colour.
     private var dotColor: Color {
