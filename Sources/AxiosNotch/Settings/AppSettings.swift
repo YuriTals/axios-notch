@@ -108,6 +108,7 @@ final class AppSettings: ObservableObject {
     @Published var reopenTabs: Bool { didSet { defaults.set(reopenTabs, forKey: "reopenTabs") } }
     @Published var soundOnNotice: Bool { didSet { defaults.set(soundOnNotice, forKey: "soundOnNotice") } }
     @Published var soundChoice: SoundChoice { didSet { defaults.set(soundChoice.rawValue, forKey: "soundChoice") } }
+    @Published var systemNotification: Bool { didSet { defaults.set(systemNotification, forKey: "systemNotification") } }
     @Published var finishBanner: Bool { didSet { defaults.set(finishBanner, forKey: "finishBanner") } }
     @Published var bannerSeconds: Double { didSet { defaults.set(bannerSeconds, forKey: "bannerSeconds") } }
     @Published var terminalFont: FontChoice {
@@ -156,6 +157,7 @@ final class AppSettings: ObservableObject {
         reopenTabs = defaults.object(forKey: "reopenTabs") as? Bool ?? true
         soundOnNotice = defaults.object(forKey: "soundOnNotice") as? Bool ?? false
         soundChoice = defaults.string(forKey: "soundChoice").flatMap(SoundChoice.init) ?? .glass
+        systemNotification = defaults.object(forKey: "systemNotification") as? Bool ?? false
         finishBanner = defaults.object(forKey: "finishBanner") as? Bool ?? true
         bannerSeconds = defaults.object(forKey: "bannerSeconds") as? Double ?? 4.5
         terminalFontSize = defaults.object(forKey: "terminalFontSize") as? Double ?? 13

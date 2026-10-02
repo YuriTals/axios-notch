@@ -551,8 +551,10 @@ final class TerminalSessionStore: ObservableObject {
             self.unread[key.id, default: 0] += 1
             let phrase = PhraseBook.pick(forShell: key.tool.isShell, avoiding: self.lastPhrase)
             self.lastPhrase = phrase
-            self.lastFinish = NotchNotice(tool: key.tool, project: session?.projectName(), phrase: phrase, sessionID: key.id)
+            let notice = NotchNotice(tool: key.tool, project: session?.projectName(), phrase: phrase, sessionID: key.id)
+            self.lastFinish = notice
             NoticeSound.playIfEnabled()
+            SystemNotifier.shared.post(notice)
         }
         session.onAttention = { [weak self, weak session] waiting in
             guard let self else { return }
@@ -562,9 +564,11 @@ final class TerminalSessionStore: ObservableObject {
                 guard self.visibleKey != key else { return }
                 let phrase = PhraseBook.pickApproval(avoiding: self.lastPhrase)
                 self.lastPhrase = phrase
-                self.lastFinish = NotchNotice(tool: key.tool, project: session?.projectName(), phrase: phrase,
-                                              level: .warning, sessionID: key.id)
+                let notice = NotchNotice(tool: key.tool, project: session?.projectName(), phrase: phrase,
+                                         level: .warning, sessionID: key.id)
+                self.lastFinish = notice
                 NoticeSound.playIfEnabled()
+                SystemNotifier.shared.post(notice)
             } else {
                 self.waitingIDs.remove(key.id)
             }

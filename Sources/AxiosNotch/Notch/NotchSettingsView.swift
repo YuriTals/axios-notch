@@ -35,6 +35,7 @@ struct NotchSettingsView: View {
     @State private var pageID: SettingsPage.ID? = SettingsPage.general.id
     @ObservedObject var usageStore: AgentUsageStore
     @State private var feedbackNote: String?
+    @State private var notificationNote: String?
     @State private var newToolName = ""
     @State private var newToolCommand = ""
     private var page: SettingsPage { SettingsPage.allCases.first { $0.id == pageID } ?? .general }
@@ -207,6 +208,26 @@ struct NotchSettingsView: View {
     private var noticesCard: some View {
         SettingsCard(title: tr("Avisos", "Notices")) {
             Toggle(tr("Aviso de resposta pronta", "Answer-ready notice"), isOn: $settings.finishBanner)
+            Toggle(tr("Notificação do macOS", "macOS notification"), isOn: $settings.systemNotification)
+                .onChange(of: settings.systemNotification) { _, on in
+                    guard on else { return }
+                    SystemNotifier.shared.requestAuthorization { access in
+                        switch access {
+                        case .allowed:
+                            notificationNote = nil
+                        case .denied:
+                            settings.systemNotification = false
+                            notificationNote = tr("Desativadas para o Axios Notch. Ative em Ajustes do Sistema › Notificações.", "Turned off for Axios Notch. Enable it in System Settings › Notifications.")
+                        case .unsupported:
+                            settings.systemNotification = false
+                            notificationNote = tr("Só funciona no app instalado (.app).", "Only works in the installed app (.app).")
+                        case .failed(let message):
+                            settings.systemNotification = false
+                            notificationNote = message
+                        }
+                    }
+                }
+            if let notificationNote { Caption(notificationNote, color: Color(red: 0.95, green: 0.45, blue: 0.4)) }
             HStack(spacing: 6) {
                 Toggle(tr("Som", "Sound"), isOn: $settings.soundOnNotice)
                 Picker("", selection: $settings.soundChoice) {

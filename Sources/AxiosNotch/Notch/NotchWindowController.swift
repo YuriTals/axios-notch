@@ -148,6 +148,12 @@ final class NotchWindowController: NSObject, ObservableObject {
                                            level: alert.severity, action: .openUsage))
             }
 
+        SystemNotifier.shared.start()
+        SystemNotifier.shared.onOpen = { [weak self] id in
+            guard let tool = TerminalSessionStore.shared.keys.first(where: { $0.id == id })?.tool else { return }
+            self?.activate(NotchNotice(tool: tool, project: nil, phrase: "", sessionID: id))
+        }
+
         finishObserver = TerminalSessionStore.shared.$lastFinish
             .compactMap { $0 }
             .receive(on: DispatchQueue.main)

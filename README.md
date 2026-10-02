@@ -57,7 +57,8 @@ reinicia, e respeita o `429` dos servidores esperando antes de tentar de novo.
 ### Avisos
 Ao terminar uma resposta, o notch desce com o ícone de quem respondeu, o projeto e uma frase.
 Quando o Claude pede uma aprovação ou uma escolha, aparece um aviso de **atenção (!)**. Um som
-opcional acompanha os avisos.
+opcional acompanha os avisos, e uma **notificação do macOS** (desligada por padrão, em
+Ajustes › Experiência) avisa quando o notch está fora de vista; clicar nela abre a aba que respondeu.
 
 ### Antigravity e suas ferramentas
 **Antigravity** (CLI `agy`, sucessora do Gemini CLI) é uma ferramenta fixa, ao lado de Claude e
