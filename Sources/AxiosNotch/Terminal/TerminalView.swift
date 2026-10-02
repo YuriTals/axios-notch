@@ -27,25 +27,106 @@ struct TerminalRepresentable: NSViewRepresentable {
     }
 }
 
-/// Prompt themes (Starship, Powerlevel10k…) draw icons from Nerd Font glyph
-/// ranges that normal fonts lack, which shows up as "?" boxes. Prefer an
-/// installed Nerd Font *Mono* variant (fixed-width glyphs, so columns line
-/// up), then any Nerd Font, then the system monospaced font.
+/// The monospaced fonts developers use most in terminals. Only the ones that
+/// are installed are offered (SF Mono is the system's own and always is).
+enum FontChoice: String, CaseIterable, Identifiable {
+    case auto, sfMono, menlo, monaco, jetbrains, firaCode, sourceCode, hack, cascadia, plex
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .auto: return tr("Automática (Nerd Font)", "Automatic (Nerd Font)")
+        case .sfMono: return "SF Mono"
+        case .menlo: return "Menlo"
+        case .monaco: return "Monaco"
+        case .jetbrains: return "JetBrains Mono"
+        case .firaCode: return "Fira Code"
+        case .sourceCode: return "Source Code Pro"
+        case .hack: return "Hack"
+        case .cascadia: return "Cascadia Code"
+        case .plex: return "IBM Plex Mono"
+        }
+    }
+
+    /// Family names to try, most specific first. A Nerd Font build comes first
+    /// so prompt icons (Starship, Powerlevel10k…) keep drawing.
+    var families: [String] {
+        switch self {
+        case .auto: return TerminalFont.nerdPreferred
+        case .sfMono: return []                                     // system font
+        case .menlo: return ["Menlo"]
+        case .monaco: return ["Monaco"]
+        case .jetbrains: return ["JetBrainsMono Nerd Font Mono", "JetBrains Mono"]
+        case .firaCode: return ["FiraCode Nerd Font Mono", "Fira Code"]
+        case .sourceCode: return ["SauceCodePro Nerd Font Mono", "Source Code Pro"]
+        case .hack: return ["Hack Nerd Font Mono", "Hack"]
+        case .cascadia: return ["CaskaydiaCove Nerd Font Mono", "Cascadia Code"]
+        case .plex: return ["BlexMono Nerd Font Mono", "IBM Plex Mono"]
+        }
+    }
+
+    /// Whether the choice can be used: the system fonts always can, and so can
+    /// anything shipped inside the app (see `FontRegistry`).
+    func isAvailable(in families: [String]) -> Bool {
+        self == .auto || self == .sfMono || self.families.contains(where: families.contains)
+    }
+
+    /// True for the choices whose font file is bundled with the app, so they
+    /// work on a Mac that has nothing installed.
+    var isBundled: Bool {
+        families.contains(where: FontRegistry.bundledFamilies.contains)
+    }
+
+    static func available(families: [String] = NSFontManager.shared.availableFontFamilies) -> [FontChoice] {
+        allCases.filter { $0.isAvailable(in: families) }
+    }
+}
+
+/// Resolves the chosen font. Prompt themes draw icons from Nerd Font glyph
+/// ranges that normal fonts lack ("?" boxes), so any chosen font gets a Nerd
+/// Font as a fallback for those glyphs when one is installed.
 enum TerminalFont {
     static var size: CGFloat { CGFloat(AppSettings.shared.terminalFontSize) }
-    private static let preferredFamilies = ["FiraCode Nerd Font Mono", "JetBrainsMono Nerd Font Mono", "MesloLGS Nerd Font Mono", "Hack Nerd Font Mono"]
+    static let nerdPreferred = ["FiraCode Nerd Font Mono", "JetBrainsMono Nerd Font Mono", "MesloLGS Nerd Font Mono", "Hack Nerd Font Mono"]
 
-    static func resolve(size: CGFloat = TerminalFont.size) -> NSFont {
-        let families = NSFontManager.shared.availableFontFamilies
-        let candidates = preferredFamilies
+    static func resolve(choice: FontChoice = AppSettings.shared.terminalFont, size: CGFloat = TerminalFont.size,
+                        families: [String] = NSFontManager.shared.availableFontFamilies) -> NSFont {
+        let nerd = nerdFamily(in: families)
+
+        if choice == .auto {
+            if let nerd, let font = font(family: nerd, size: size) { return font }
+            return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        }
+        let base: NSFont
+        if choice == .sfMono {
+            base = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        } else if let family = choice.families.first(where: families.contains), let found = font(family: family, size: size) {
+            base = found
+        } else {
+            return resolve(choice: .auto, size: size, families: families)
+        }
+        // Already a Nerd Font, or none installed: nothing to add.
+        let baseIsNerd = base.familyName?.localizedCaseInsensitiveContains("Nerd") ?? false
+        guard let nerd, !baseIsNerd else { return base }
+        return withNerdFallback(base, nerdFamily: nerd, size: size)
+    }
+
+    private static func nerdFamily(in families: [String]) -> String? {
+        let candidates = nerdPreferred
             + families.filter { $0.localizedCaseInsensitiveContains("Nerd Font Mono") }
             + families.filter { $0.localizedCaseInsensitiveContains("Nerd Font") && !$0.localizedCaseInsensitiveContains("Propo") }
-        for family in candidates where families.contains(family) {
-            if let font = NSFontManager.shared.font(withFamily: family, traits: [], weight: 5, size: size) {
-                return font
-            }
-        }
-        return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        return candidates.first(where: families.contains)
+    }
+
+    private static func font(family: String, size: CGFloat) -> NSFont? {
+        NSFontManager.shared.font(withFamily: family, traits: [], weight: 5, size: size)
+    }
+
+    private static func withNerdFallback(_ base: NSFont, nerdFamily: String, size: CGFloat) -> NSFont {
+        guard let nerd = font(family: nerdFamily, size: size) else { return base }
+        let descriptor = base.fontDescriptor.addingAttributes([.cascadeList: [nerd.fontDescriptor]])
+        return NSFont(descriptor: descriptor, size: size) ?? base
     }
 }
 

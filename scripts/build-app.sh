@@ -22,6 +22,11 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/AxiosNotch" "$APP/Contents/MacOS/AxiosNotch"
 cp Sources/AxiosNotch/Resources/AxiosMark.png "$APP/Contents/Resources/"
 cp Packaging/AppIcon.icns "$APP/Contents/Resources/"
+# Terminal fonts (Nerd Font builds of six popular families) ride inside the app,
+# with their licences, so nothing has to be installed separately.
+mkdir -p "$APP/Contents/Resources/Fonts"
+cp Sources/AxiosNotch/Resources/Fonts/*.ttf "$APP/Contents/Resources/Fonts/"
+cp -R Sources/AxiosNotch/Resources/Fonts/licenses "$APP/Contents/Resources/Fonts/licenses"
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" Packaging/Info.plist > "$APP/Contents/Info.plist"
 
 # Bundled SwiftPM resource bundles (none are needed at runtime: AppResources

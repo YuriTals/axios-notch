@@ -176,6 +176,12 @@ final class TerminalSessionStore: ObservableObject {
 
     // MARK: Fonts and visibility
 
+    /// Applies the chosen colour scheme to every live terminal.
+    func refreshThemes() {
+        let theme = AppSettings.shared.terminalTheme
+        for session in sessions.values { theme.apply(to: session.view) }
+    }
+
     /// Applies the current font size to every live terminal.
     func refreshFonts() {
         for session in sessions.values { session.view.font = TerminalFont.resolve() }
@@ -307,6 +313,7 @@ final class TerminalSessionStore: ObservableObject {
         }
         let session = Session(key: key, mode: mode)
         session.view.font = TerminalFont.resolve()
+        AppSettings.shared.terminalTheme.apply(to: session.view)
         session.view.processDelegate = session
         session.view.onSubmit = { [weak session] in
             guard let session else { return }

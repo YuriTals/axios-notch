@@ -17,6 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        // Before anything asks for a font: the bundled ones must already exist.
+        FontRegistry.registerBundledFonts()
 
         let usageStore = AgentUsageStore()
         self.usageStore = usageStore

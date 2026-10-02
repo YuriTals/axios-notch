@@ -91,13 +91,37 @@ struct NotchSettingsView: View {
     // A single block: the grid centres it on the page.
     private var appearancePage: some View {
         CardGridLayout {
-            SettingsCard(title: tr("Cor de destaque", "Accent color")) {
+            SettingsCard(title: "Design") {
+                Text(tr("Cor de destaque", "Accent color"))
                 HStack(spacing: 9) {
                     ForEach(AccentChoice.allCases) { choice in
                         AccentSwatch(choice: choice, isSelected: settings.accent == choice) { settings.accent = choice }
                     }
                 }
-                Caption(tr("Controles dos ajustes, tile do Terminal e o aviso dele. Claude e Codex mantêm as cores próprias.", "Settings controls, the Terminal tile and its notice. Claude and Codex keep their own colors."))
+                HStack(spacing: 8) {
+                    Text(tr("Tema", "Theme"))
+                    Picker("", selection: $settings.terminalTheme) {
+                        ForEach(TerminalTheme.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity)
+                }
+                HStack(spacing: 8) {
+                    Text(tr("Fonte", "Font"))
+                    Picker("", selection: $settings.terminalFont) {
+                        ForEach(FontChoice.available()) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity)
+                    Stepper("", value: $settings.terminalFontSize, in: 10...20, step: 1)
+                        .labelsHidden()
+                    Text("\(Int(settings.terminalFontSize))")
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.6))
+                        .frame(width: 20)
+                }
             }
         }
     }
@@ -148,7 +172,7 @@ struct NotchSettingsView: View {
                 .labelsHidden()
                 Caption(tr("Troca saltos e molas por transições simples.", "Swaps bounces and springs for simple transitions."))
             }
-            SettingsCard(title: tr("Avisos e terminal", "Notices & terminal")) {
+            SettingsCard(title: tr("Avisos", "Notices")) {
                 Toggle(tr("Aviso de resposta pronta", "Answer-ready notice"), isOn: $settings.finishBanner)
                 HStack {
                     Text(tr("Duração", "Duration"))
@@ -158,9 +182,6 @@ struct NotchSettingsView: View {
                         .monospacedDigit()
                         .foregroundStyle(.white.opacity(0.6))
                         .frame(width: 40, alignment: .trailing)
-                }
-                Stepper(value: $settings.terminalFontSize, in: 10...20, step: 1) {
-                    Text(tr("Fonte do terminal: \(Int(settings.terminalFontSize)) pt", "Terminal font: \(Int(settings.terminalFontSize)) pt"))
                 }
             }
         }

@@ -90,6 +90,18 @@ final class AppSettings: ObservableObject {
     @Published var soundChoice: SoundChoice { didSet { defaults.set(soundChoice.rawValue, forKey: "soundChoice") } }
     @Published var finishBanner: Bool { didSet { defaults.set(finishBanner, forKey: "finishBanner") } }
     @Published var bannerSeconds: Double { didSet { defaults.set(bannerSeconds, forKey: "bannerSeconds") } }
+    @Published var terminalFont: FontChoice {
+        didSet {
+            defaults.set(terminalFont.rawValue, forKey: "terminalFont")
+            TerminalSessionStore.shared.refreshFonts()
+        }
+    }
+    @Published var terminalTheme: TerminalTheme {
+        didSet {
+            defaults.set(terminalTheme.rawValue, forKey: "terminalTheme")
+            TerminalSessionStore.shared.refreshThemes()
+        }
+    }
     @Published var terminalFontSize: Double {
         didSet {
             defaults.set(terminalFontSize, forKey: "terminalFontSize")
@@ -112,6 +124,8 @@ final class AppSettings: ObservableObject {
         finishBanner = defaults.object(forKey: "finishBanner") as? Bool ?? true
         bannerSeconds = defaults.object(forKey: "bannerSeconds") as? Double ?? 4.5
         terminalFontSize = defaults.object(forKey: "terminalFontSize") as? Double ?? 13
+        terminalFont = defaults.string(forKey: "terminalFont").flatMap(FontChoice.init) ?? .auto
+        terminalTheme = defaults.string(forKey: "terminalTheme").flatMap(TerminalTheme.init) ?? .standard
     }
 
     /// Whether to tone motion down, honoring the macOS accessibility setting

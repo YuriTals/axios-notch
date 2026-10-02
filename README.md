@@ -75,6 +75,18 @@ Packaging/    Info.plist e ícone do .app
 scripts/      build-app.sh, make-icon.py
 ```
 
+## Fontes incluídas
+
+O app leva dentro dele (em `Contents/Resources/Fonts`) as versões **Nerd Font Mono** de seis fontes de
+terminal muito usadas, para que ninguém precise instalar nada: **JetBrains Mono**, **Fira Code**,
+**Source Code Pro**, **Hack**, **Cascadia Code** e **IBM Plex Mono**. Elas só existem enquanto o app está
+aberto (não são instaladas no Font Book). As variantes Nerd Font trazem os ícones usados por prompts como
+Starship e Powerlevel10k. Menlo, Monaco e SF Mono são da Apple e já vêm no macOS.
+
+As fontes originais são distribuídas sob a SIL Open Font License 1.1 (e Hack sob MIT); os textos das
+licenças acompanham os arquivos em `Sources/AxiosNotch/Resources/Fonts/licenses/`. As versões
+"patched" vêm do projeto [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts).
+
 ## Créditos
 
 O desenho do notch (orelhas côncavas no topo, cantos inferiores arredondados e a animação de
