@@ -85,6 +85,9 @@ final class AppSettings: ObservableObject {
     @Published var motion: MotionPreference { didSet { defaults.set(motion.rawValue, forKey: "motion") } }
     @Published var hoverHaptic: Bool { didSet { defaults.set(hoverHaptic, forKey: "hoverHaptic") } }
     @Published var hapticStrength: HapticStrength { didSet { defaults.set(hapticStrength.rawValue, forKey: "hapticStrength") } }
+    /// A short system sound when an answer is ready or a tool is waiting. Off by default.
+    @Published var soundOnNotice: Bool { didSet { defaults.set(soundOnNotice, forKey: "soundOnNotice") } }
+    @Published var soundChoice: SoundChoice { didSet { defaults.set(soundChoice.rawValue, forKey: "soundChoice") } }
     @Published var finishBanner: Bool { didSet { defaults.set(finishBanner, forKey: "finishBanner") } }
     @Published var bannerSeconds: Double { didSet { defaults.set(bannerSeconds, forKey: "bannerSeconds") } }
     @Published var terminalFontSize: Double {
@@ -104,6 +107,8 @@ final class AppSettings: ObservableObject {
         motion = defaults.string(forKey: "motion").flatMap(MotionPreference.init) ?? .system
         hoverHaptic = defaults.object(forKey: "hoverHaptic") as? Bool ?? true
         hapticStrength = (defaults.object(forKey: "hapticStrength") as? Int).flatMap(HapticStrength.init) ?? .strong
+        soundOnNotice = defaults.object(forKey: "soundOnNotice") as? Bool ?? false
+        soundChoice = defaults.string(forKey: "soundChoice").flatMap(SoundChoice.init) ?? .glass
         finishBanner = defaults.object(forKey: "finishBanner") as? Bool ?? true
         bannerSeconds = defaults.object(forKey: "bannerSeconds") as? Double ?? 4.5
         terminalFontSize = defaults.object(forKey: "terminalFontSize") as? Double ?? 13

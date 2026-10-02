@@ -119,7 +119,7 @@ struct NotchSettingsView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
             }
-            SettingsCard(title: tr("Vibração", "Haptics")) {
+            SettingsCard(title: tr("Vibração e som", "Haptics & sound")) {
                 Toggle(tr("Vibrar ao passar o mouse", "Vibrate on hover"), isOn: $settings.hoverHaptic)
                 Picker("", selection: $settings.hapticStrength) {
                     ForEach(HapticStrength.allCases) { Text($0.label).tag($0) }
@@ -127,6 +127,17 @@ struct NotchSettingsView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .disabled(!settings.hoverHaptic)
+                HStack(spacing: 6) {
+                    Toggle(tr("Som", "Sound"), isOn: $settings.soundOnNotice)
+                    Picker("", selection: $settings.soundChoice) {
+                        ForEach(SoundChoice.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 84)
+                    .disabled(!settings.soundOnNotice)
+                    .onChange(of: settings.soundChoice) { _, choice in NoticeSound.play(choice) }   // preview
+                }
             }
             SettingsCard(title: tr("Acessibilidade", "Accessibility")) {
                 Text(tr("Reduzir movimento", "Reduce motion"))

@@ -26,6 +26,16 @@ sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" Packaging/Info.plist >
 
 # Bundled SwiftPM resource bundles (none are needed at runtime: AppResources
 # reads straight from Contents/Resources), so nothing else to copy.
-codesign --force --deep --options runtime --sign "$IDENTITY" "$APP"
+# An ad-hoc signature is identified by the hash of the code, which changes on
+# every build — so macOS treats each build as a brand-new app and asks for every
+# permission (Music, Documents, Desktop…) again. Pin the identity to the bundle
+# identifier instead, so approvals survive rebuilds. (A Developer ID signature
+# already has a stable identity, so it needs no such requirement.)
+if [ "$IDENTITY" = "-" ]; then
+    codesign --force --deep --options runtime --sign - \
+        --requirements '=designated => identifier "com.axiosnotch.app"' "$APP"
+else
+    codesign --force --deep --options runtime --sign "$IDENTITY" "$APP"
+fi
 codesign --verify --deep --strict "$APP"
 echo "Built: $APP (version $VERSION, build $BUILD)"
