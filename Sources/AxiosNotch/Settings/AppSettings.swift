@@ -86,6 +86,8 @@ final class AppSettings: ObservableObject {
     @Published var hoverHaptic: Bool { didSet { defaults.set(hoverHaptic, forKey: "hoverHaptic") } }
     @Published var hapticStrength: HapticStrength { didSet { defaults.set(hapticStrength.rawValue, forKey: "hapticStrength") } }
     /// A short system sound when an answer is ready or a tool is waiting. Off by default.
+    /// Bring back the tabs (not the conversations) when the app starts.
+    @Published var reopenTabs: Bool { didSet { defaults.set(reopenTabs, forKey: "reopenTabs") } }
     @Published var soundOnNotice: Bool { didSet { defaults.set(soundOnNotice, forKey: "soundOnNotice") } }
     @Published var soundChoice: SoundChoice { didSet { defaults.set(soundChoice.rawValue, forKey: "soundChoice") } }
     @Published var finishBanner: Bool { didSet { defaults.set(finishBanner, forKey: "finishBanner") } }
@@ -119,6 +121,7 @@ final class AppSettings: ObservableObject {
         motion = defaults.string(forKey: "motion").flatMap(MotionPreference.init) ?? .system
         hoverHaptic = defaults.object(forKey: "hoverHaptic") as? Bool ?? true
         hapticStrength = (defaults.object(forKey: "hapticStrength") as? Int).flatMap(HapticStrength.init) ?? .strong
+        reopenTabs = defaults.object(forKey: "reopenTabs") as? Bool ?? true
         soundOnNotice = defaults.object(forKey: "soundOnNotice") as? Bool ?? false
         soundChoice = defaults.string(forKey: "soundChoice").flatMap(SoundChoice.init) ?? .glass
         finishBanner = defaults.object(forKey: "finishBanner") as? Bool ?? true

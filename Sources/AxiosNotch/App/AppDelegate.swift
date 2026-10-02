@@ -23,12 +23,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let usageStore = AgentUsageStore()
         self.usageStore = usageStore
         notchController = NotchWindowController(usageStore: usageStore)
+        if AppSettings.shared.reopenTabs { TerminalSessionStore.shared.restoreTabs() }
+        TerminalSessionStore.shared.startAutosavingTabs()
         usageStore.start()
 
         setUpStatusItem()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if AppSettings.shared.reopenTabs { TerminalSessionStore.shared.saveTabs() }
         usageStore?.stop()
     }
 

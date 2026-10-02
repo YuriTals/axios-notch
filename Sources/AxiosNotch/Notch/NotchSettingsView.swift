@@ -136,6 +136,7 @@ struct NotchSettingsView: View {
                 } else if !LoginItem.isBundled {
                     Caption(tr("Fora de um .app: usa um LaunchAgent deste binário.", "Outside an .app: uses a LaunchAgent for this binary."))
                 }
+                Toggle(tr("Reabrir abas ao iniciar", "Reopen tabs on launch"), isOn: $settings.reopenTabs)
                 Text(tr("Idioma", "Language"))
                 Picker("", selection: $settings.language) {
                     ForEach(LanguageChoice.allCases) { Text($0.label).tag($0) }

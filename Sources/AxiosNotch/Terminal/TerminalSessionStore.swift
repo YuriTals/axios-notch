@@ -65,6 +65,7 @@ final class TerminalSessionStore: ObservableObject {
     /// The tab whose terminal is currently on screen, if any.
     private var visibleKey: SessionKey?
     private var sessions: [SessionKey: Session] = [:]
+    private var autosaveTimer: Timer?
 
     // MARK: Queries (aggregated per tool — used by tiles and the closed notch)
 
@@ -180,6 +181,49 @@ final class TerminalSessionStore: ObservableObject {
 
     /// Whether there is something to copy (cheap enough for a button's state).
     func hasAnswer(for key: SessionKey) -> Bool { lastAnswer(for: key) != nil }
+
+    // MARK: Reopening tabs on launch
+
+    /// The open tabs and their folders, for the next launch.
+    func snapshot() -> SavedTabs {
+        SavedTabs(tabs: keys.map { key in
+            SavedTab(provider: key.provider?.rawValue,
+                     directory: currentDirectory(for: key),
+                     wasSelected: selectedKey(for: key.provider) == key)
+        })
+    }
+
+    /// Saves the snapshot (cheap: a few small strings).
+    func saveTabs(defaults: UserDefaults = .standard) { snapshot().save(defaults: defaults) }
+
+    /// Reopens saved tabs in their folders. New processes — the old ones are gone
+    /// — so Claude and Codex start a fresh conversation. Does nothing if tabs
+    /// are already open.
+    @discardableResult
+    func restoreTabs(_ saved: SavedTabs = SavedTabs.load()) -> Int {
+        guard keys.isEmpty else { return 0 }
+        var restored = 0
+        var selected: [SessionKey] = []
+        for tab in saved.restorable() {
+            let provider = tab.provider.flatMap(AgentProvider.init(rawValue:))
+            let key = openSession(provider, directory: tab.directory)
+            restored += 1
+            if tab.wasSelected { selected.append(key) }
+        }
+        // `openSession` selects whatever it opened last; put the saved choice back.
+        for key in selected { select(key) }
+        return restored
+    }
+
+    /// Saves the tabs now and then, so a crash or a force-quit loses little (the
+    /// folder of a tab changes on `cd`, which nothing announces).
+    func startAutosavingTabs(every seconds: TimeInterval = 10) {
+        guard autosaveTimer == nil else { return }
+        autosaveTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: true) { [weak self] _ in
+            guard let self, AppSettings.shared.reopenTabs else { return }
+            self.saveTabs()
+        }
+    }
 
     // MARK: Recent folders
 
