@@ -68,6 +68,7 @@ struct TerminalPanelView: View {
                 }
                 SessionTabs(provider: provider)
                 Spacer(minLength: 4)
+                OpenFolderButton(provider: provider)
                 Button(action: onClose) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.white.opacity(0.6))
@@ -88,6 +89,45 @@ struct TerminalPanelView: View {
         .onChange(of: selected) { _, newValue in
             if newValue == nil { onClose() }
         }
+    }
+}
+
+/// Folder icon: show the selected tab's folder in Finder, or open it in an
+/// installed editor. The folder is read when you click, so it is always the
+/// one the shell is in right now.
+private struct OpenFolderButton: View {
+    let provider: AgentProvider?
+    @ObservedObject private var store = TerminalSessionStore.shared
+
+    private func folder() -> String? {
+        store.selectedKey(for: provider).flatMap { store.currentDirectory(for: $0) }
+    }
+
+    var body: some View {
+        Menu {
+            Button(tr("Mostrar no Finder", "Show in Finder")) { folder().map(FolderOpener.showInFinder) }
+            let editors = EditorCatalog.installed()
+            if !editors.isEmpty {
+                Divider()
+                ForEach(editors) { editor in
+                    Button(tr("Abrir no \(editor.name)", "Open in \(editor.name)")) {
+                        if let path = folder() { FolderOpener.open(path, in: editor) }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "folder")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(.white.opacity(0.08)))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(tr("Abrir a pasta desta sessão", "Open this session's folder"))
+        .accessibilityLabel(tr("Abrir pasta", "Open folder"))
     }
 }
 
