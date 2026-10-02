@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Preferences, shown inside the notch like every other panel.
@@ -14,6 +15,7 @@ struct NotchSettingsView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.white)
                 Spacer()
+                AppBadge()
             }
 
             // Two equal rows of two equal cards.
@@ -111,5 +113,31 @@ private struct Caption: View {
 
     var body: some View {
         Text(text).font(.system(size: 10)).foregroundStyle(color).fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// The app's mark and name, tiny, in the corner of the settings panel.
+private struct AppBadge: View {
+    private static let mark: NSImage? = {
+        guard let url = AppResources.url(forResource: "AxiosMark", withExtension: "png") else { return nil }
+        return NSImage(contentsOf: url)
+    }()
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Group {
+                if let mark = Self.mark {
+                    Image(nsImage: mark).resizable().scaledToFit()
+                } else {
+                    Image(systemName: "asterisk")
+                }
+            }
+            .frame(width: 12, height: 12)
+            Text("Axios Notch")
+                .font(.system(size: 10.5, weight: .medium))
+        }
+        .foregroundStyle(.white.opacity(0.45))
+        .padding(.trailing, 6)
+        .accessibilityElement(children: .combine)
     }
 }
