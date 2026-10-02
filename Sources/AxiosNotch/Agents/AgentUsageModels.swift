@@ -114,6 +114,15 @@ struct AgentUsageWindow: Equatable {
     var end: Date?
 }
 
+/// One model's share of recent usage.
+struct AgentModelUsage: Equatable, Identifiable {
+    var id: String { name }
+    /// Raw model id from the logs.
+    let name: String
+    var tokens: Int
+    var cost: Double
+}
+
 /// What the notch shows for one provider: today's usage plus the richer
 /// breakdown (trend, models, projects, activity history) the dashboard draws.
 struct AgentUsageSummary: Equatable {
@@ -144,4 +153,6 @@ struct AgentUsageSummary: Equatable {
     var week = AgentUsageWindow()
     /// Spend per day for the last 7 days, oldest first, today last.
     var weekDailyCost: [Double] = Array(repeating: 0, count: 7)
+    /// Last 7 days split by model, biggest first.
+    var weekModels: [AgentModelUsage] = []
 }

@@ -60,6 +60,7 @@ final class AgentUsageAggregator {
         var fiveHourBlock: AgentUsageWindow?
         var week = AgentUsageWindow()
         var weekDailyCost: [Double] = Array(repeating: 0, count: 7)
+        var weekModels: [AgentModelUsage] = []
     }
 
     static let blockLength: TimeInterval = 5 * 3600
@@ -97,6 +98,17 @@ final class AgentUsageAggregator {
             week.tokens += event.tokens
             week.cost += cost(of: event)
         }
+        var byModel: [String: AgentModelUsage] = [:]
+        for event in events where event.date >= weekStart && event.date <= now {
+            guard let model = event.model, !model.hasPrefix("<") else { continue }   // skip "<synthetic>"
+            var entry = byModel[model] ?? AgentModelUsage(name: model, tokens: 0, cost: 0)
+            entry.tokens += event.tokens.totalTokens
+            entry.cost += cost(of: event)
+            byModel[model] = entry
+        }
+        // Rank by spend when pricing is known, else by tokens.
+        let weekModels = byModel.values.sorted { ($0.cost, $0.tokens) > ($1.cost, $1.tokens) }
+
         let weekDaily: [Double] = (0..<7).map { offset in
             guard let day = calendar.date(byAdding: .day, value: offset - 6, to: now) else { return 0 }
             return dailyCost[DayKey(date: day, calendar: calendar)] ?? 0
@@ -118,7 +130,8 @@ final class AgentUsageAggregator {
             busiestDay: history.max { $0.cost < $1.cost },
             fiveHourBlock: activeBlock(now: now),
             week: week,
-            weekDailyCost: weekDaily
+            weekDailyCost: weekDaily,
+            weekModels: weekModels
         )
     }
 

@@ -7,9 +7,18 @@ struct AgentLimit: Equatable {
     var resetsAt: Date?
 }
 
+/// A weekly cap that applies to one model or product (Opus, Sonnet, …).
+struct AgentModelLimit: Equatable, Identifiable {
+    var id: String { label }
+    let label: String
+    var limit: AgentLimit
+}
+
 struct AgentRateLimits: Equatable {
     var fiveHour: AgentLimit?
     var weekly: AgentLimit?
+    /// Only the caps the provider reports and that have been touched.
+    var modelLimits: [AgentModelLimit] = []
     var planLabel: String?
     var fetchedAt: Date
 }
@@ -35,7 +44,15 @@ enum RateLimitParser {
         }
         let five = limit("five_hour"), week = limit("seven_day")
         guard five != nil || week != nil else { return nil }
-        return AgentRateLimits(fiveHour: five, weekly: week, planLabel: plan, fetchedAt: now)
+        let perModel: [(key: String, label: String)] = [
+            ("seven_day_opus", "Opus"), ("seven_day_sonnet", "Sonnet"),
+            ("seven_day_omelette", "Fable"), ("seven_day_cowork", "Cowork"),
+        ]
+        let modelLimits = perModel.compactMap { entry -> AgentModelLimit? in
+            guard let found = limit(entry.key), found.percent > 0 else { return nil }
+            return AgentModelLimit(label: entry.label, limit: found)
+        }
+        return AgentRateLimits(fiveHour: five, weekly: week, modelLimits: modelLimits, planLabel: plan, fetchedAt: now)
     }
 
     /// `GET chatgpt.com/backend-api/wham/usage`. The windows can arrive as

@@ -77,6 +77,7 @@ final class CodexUsageReader {
         summary.fiveHourBlock = breakdown.fiveHourBlock
         summary.week = breakdown.week
         summary.weekDailyCost = breakdown.weekDailyCost
+        summary.weekModels = breakdown.weekModels
         summary.latestSessionTokens = mostRecentSessionTokens(among: files)
         summary.lastActivity = aggregator.lastActivity
         return summary

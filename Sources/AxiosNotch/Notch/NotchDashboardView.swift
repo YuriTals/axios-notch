@@ -25,6 +25,11 @@ struct NotchUsageView: View {
                     footnote: footnote(summary?.week)
                 )
             }
+            ModelUsageSection(
+                provider: provider,
+                models: summary?.weekModels ?? [],
+                caps: limits.rateLimits?.modelLimits ?? []
+            )
         }
         .padding(.horizontal, 6)
         .padding(.bottom, 14)
@@ -165,6 +170,7 @@ private struct LimitCard: View {
                 }
             }
         }
+        .frame(height: 142)   // same height whether or not there is a footnote
         .animation(.smooth, value: limit)
     }
 
@@ -211,6 +217,95 @@ private struct DayBars: View {
             }
         }
         .frame(height: height, alignment: .bottom)
+    }
+}
+
+/// Which models the last 7 days went to: one proportional bar plus a legend,
+/// and — when the plan reports weekly caps per model — how much of each cap
+/// is used. Shares follow spend when pricing is known, else tokens.
+private struct ModelUsageSection: View {
+    let provider: AgentProvider
+    let models: [AgentModelUsage]
+    let caps: [AgentModelLimit]
+
+    private struct Slice: Identifiable {
+        let id: String
+        let name: String
+        let share: Double
+        let color: Color
+    }
+
+    private var palette: [Color] {
+        switch provider {
+        case .claude:
+            return [NotchTheme.claudeAccent, Color(red: 0.96, green: 0.74, blue: 0.50), Color(red: 0.52, green: 0.72, blue: 0.95), .white.opacity(0.35)]
+        case .codex:
+            return [NotchTheme.codexAccent, Color(red: 0.70, green: 0.55, blue: 1.0), Color(red: 0.40, green: 0.85, blue: 0.80), .white.opacity(0.35)]
+        }
+    }
+
+    private var slices: [Slice] {
+        let totalCost = models.reduce(0) { $0 + $1.cost }
+        let useCost = totalCost > 0
+        let total = useCost ? totalCost : Double(models.reduce(0) { $0 + $1.tokens })
+        guard total > 0 else { return [] }
+        func value(_ m: AgentModelUsage) -> Double { useCost ? m.cost : Double(m.tokens) }
+
+        let top = models.prefix(3)
+        var result = top.enumerated().map { index, model in
+            Slice(id: model.name, name: ModelName.display(model.name), share: value(model) / total, color: palette[index])
+        }
+        let rest = models.dropFirst(3).reduce(0) { $0 + value($1) }
+        if rest > 0 { result.append(Slice(id: "others", name: "Outros", share: rest / total, color: palette[3])) }
+        return result
+    }
+
+    /// A sliver of a percent reads "<1%", not a misleading "0%".
+    private func percentText(_ share: Double) -> String {
+        let percent = Int((share * 100).rounded())
+        return percent == 0 ? "<1%" : "\(percent)%"
+    }
+
+    private var capsText: String? {
+        guard !caps.isEmpty else { return nil }
+        return caps.map { "\($0.label) \(Int($0.limit.percent.rounded()))%" }.joined(separator: " · ")
+    }
+
+    var body: some View {
+        Card(title: "Por modelo", trailing: capsText.map { "Limite: \($0)" } ?? "7 dias") {
+            if slices.isEmpty {
+                Text("Sem uso nos últimos 7 dias")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.4))
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    GeometryReader { proxy in
+                        HStack(spacing: 2) {
+                            ForEach(slices) { slice in
+                                Capsule()
+                                    .fill(slice.color)
+                                    .frame(width: max(4, (proxy.size.width - CGFloat(slices.count - 1) * 2) * slice.share))
+                            }
+                        }
+                    }
+                    .frame(height: 6)
+                    HStack(spacing: 12) {
+                        ForEach(slices) { slice in
+                            HStack(spacing: 5) {
+                                Circle().fill(slice.color).frame(width: 6, height: 6)
+                                Text("\(slice.name) \(percentText(slice.share))")
+                                    .font(.system(size: 10.5))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.white.opacity(0.7))
+                                    .lineLimit(1)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+        }
+        .frame(height: 76)
     }
 }
 
