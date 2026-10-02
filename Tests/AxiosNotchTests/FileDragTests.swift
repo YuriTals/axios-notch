@@ -78,3 +78,53 @@ final class FileDragTests: XCTestCase {
         XCTAssertTrue(screen.contains("/tmp/uma\\ foto.png"), screen)
     }
 }
+
+final class FolderDropTests: XCTestCase {
+    private func makeDir(_ name: String, in base: URL) throws -> URL {
+        let url = base.appendingPathComponent(name)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    func testFoldersAreFoldersButFilesAndPackagesAreNot() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("axios-folders-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let folderA = try makeDir("projeto a", in: base), folderB = try makeDir("b", in: base)
+        let file = base.appendingPathComponent("nota.txt"); try Data("x".utf8).write(to: file)
+        let package = try makeDir("Coisa.app", in: base)
+        try Data("<plist/>".utf8).write(to: package.appendingPathComponent("Info.plist"))
+        _ = try? FileManager.default.createDirectory(at: package.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+
+        XCTAssertTrue(FileDrag.areAllFolders([folderA]))
+        XCTAssertTrue(FileDrag.areAllFolders([folderA, folderB]))
+        XCTAssertFalse(FileDrag.areAllFolders([file]))
+        XCTAssertFalse(FileDrag.areAllFolders([folderA, file]), "a mix is attached, not opened")
+        XCTAssertFalse(FileDrag.areAllFolders([package]), "an .app is a file to the user")
+        XCTAssertFalse(FileDrag.areAllFolders([]))
+        XCTAssertFalse(FileDrag.areAllFolders([URL(fileURLWithPath: "/no/such/folder")]))
+    }
+
+    func testDroppedFoldersStartANewTabInEachFolder() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("axios-open-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let one = try makeDir("um", in: base), two = try makeDir("dois", in: base)
+
+        let store = TerminalSessionStore()
+        defer { for key in store.keys { store.close(key) } }
+        store.ensureSelected(nil)                                                       // a tab already exists
+        let first = store.openSession(nil, directory: one.path)
+        let second = store.openSession(nil, directory: two.path)
+        XCTAssertEqual(store.keys(for: nil).count, 3, "folders must open new tabs, never reuse the old one")
+        XCTAssertEqual(store.selectedKey(for: nil), second)
+
+        let settle = expectation(description: "shells started"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { settle.fulfill() }
+        wait(for: [settle], timeout: 4)
+        let resolved = { (key: SessionKey) in store.currentDirectory(for: key).map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path } }
+        XCTAssertEqual(resolved(first), one.resolvingSymlinksInPath().path)
+        XCTAssertEqual(resolved(second), two.resolvingSymlinksInPath().path)
+        XCTAssertEqual(store.title(for: first), "um")                                  // the tab is named after the folder
+        XCTAssertEqual(store.recents.paths.prefix(2).map { URL(fileURLWithPath: $0).lastPathComponent }, ["dois", "um"])
+    }
+}

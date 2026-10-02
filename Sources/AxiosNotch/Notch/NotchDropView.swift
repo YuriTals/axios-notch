@@ -7,11 +7,21 @@ import UniformTypeIdentifiers
 struct NotchDropView: View {
     @ObservedObject var controller: NotchWindowController
 
+    /// Folders start a session in them; anything else is added to the chat.
+    private var title: String {
+        let folders = controller.draggedFolders
+        guard let first = folders.first else { return tr("Solte para adicionar ao chat", "Drop to add to the chat") }
+        let name = folders.count == 1 ? first.lastPathComponent : tr("\(folders.count) pastas", "\(folders.count) folders")
+        return tr("Solte para abrir uma sessão em \(name)", "Drop to start a session in \(name)")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(tr("Solte para adicionar ao chat", "Drop to add to the chat"))
+            Text(title)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.55))
+                .lineLimit(1)
+                .truncationMode(.middle)
                 .padding(.leading, 4)
 
             HStack(spacing: 10) {

@@ -41,6 +41,16 @@ enum FileDrag {
         return (pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL]) ?? []
     }
 
+    /// True when everything dragged is a plain folder. Packages (`.app`, `.xcodeproj`)
+    /// are folders on disk but files to the user, so they do not count.
+    static func areAllFolders(_ urls: [URL]) -> Bool {
+        guard !urls.isEmpty else { return false }
+        return urls.allSatisfy { url in
+            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
+            return values?.isDirectory == true && values?.isPackage != true
+        }
+    }
+
     /// Reads the file URLs out of what a SwiftUI drop hands over.
     static func loadFileURLs(from providers: [NSItemProvider], completion: @escaping ([URL]) -> Void) {
         let identifier = UTType.fileURL.identifier

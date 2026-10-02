@@ -270,6 +270,9 @@ final class NotchWindowController: NSObject, ObservableObject {
 
     private var dragCheckedChange = -1
     private var dragIsFiles = false
+    /// What the current file drag carries: dropping folders starts sessions in
+    /// them, dropping files adds them to a chat.
+    @Published private(set) var draggedFolders: [URL] = []
 
     /// Called on every drag movement anywhere on screen.
     private func handleFileDrag() {
@@ -277,7 +280,9 @@ final class NotchWindowController: NSObject, ObservableObject {
         // Reading the pasteboard on every movement is wasteful; do it once per drag.
         if drag.changeCount != dragCheckedChange {
             dragCheckedChange = drag.changeCount
-            dragIsFiles = !FileDrag.fileURLs(in: drag).isEmpty
+            let urls = FileDrag.fileURLs(in: drag)
+            dragIsFiles = !urls.isEmpty
+            draggedFolders = FileDrag.areAllFolders(urls) ? urls : []
         }
         let action = FileDragRules.action(
             isFileDrag: dragIsFiles, pointer: NSEvent.mouseLocation, notch: geometry.frame,
@@ -298,6 +303,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// The mouse button was released somewhere. If nothing took the drop, close.
     private func fileDragEnded() {
         dragIsFiles = false
+        draggedFolders = []
         guard state == .drop else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
             guard let self, self.state == .drop else { return }
@@ -308,6 +314,14 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// Files were dropped on a tool: open its chat and add them.
     func attach(_ urls: [URL], to provider: AgentProvider?) {
         guard !urls.isEmpty else { return }
+        // Folders are not "attached": they are where a new session should start.
+        if FileDrag.areAllFolders(urls) {
+            for folder in urls.prefix(SessionKey.maxPerProvider) {
+                TerminalSessionStore.shared.openSession(provider, directory: folder.path)
+            }
+            openTerminal(for: provider)                    // shows the last one opened
+            return
+        }
         openTerminal(for: provider)
         TerminalSessionStore.shared.attach(paths: urls.map(\.path), to: provider)
     }
