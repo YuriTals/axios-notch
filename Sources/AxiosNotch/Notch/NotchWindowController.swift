@@ -59,7 +59,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// Room around the surface for the drop shadow.
     private let shadowInset = CGSize(width: 24, height: 30)
     /// Content heights below the notch strip; widths include the ears.
-    private static let pickerHeight: CGFloat = 116
+    private static let pickerHeight: CGFloat = 124
     /// Wide enough for every tile: 3 built in plus the user's own (each 90 + 10 gap).
     private var pickerSize: CGSize {
         CGSize(width: Self.pickerWidth(tiles: Tool.all().count), height: Self.pickerHeight)

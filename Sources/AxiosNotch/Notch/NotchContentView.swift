@@ -29,7 +29,9 @@ struct NotchContentView: View {
     var body: some View {
         surface
             .frame(width: controller.surfaceSize.width, height: controller.surfaceSize.height, alignment: .top)
-            .background(NotchTheme.panelFill)
+            // The panel itself must merge with the physical camera housing;
+            // depth belongs to the cards, never to the notch background.
+            .background(Color.black)
             .overlay(alignment: .top) { closeStrip }
             .clipShape(shape)
             .compositingGroup()
@@ -60,7 +62,7 @@ struct NotchContentView: View {
         case .closed:
             closedView
         case .picker:
-            NotchPickerView(controller: controller)
+            NotchPickerView(controller: controller, usageStore: usageStore)
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
                 .frame(width: controller.openSize(for: controller.state).width,
@@ -130,6 +132,7 @@ struct NotchContentView: View {
             Text("Axios")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.7))
+            ClosedToolStatus()
             // Visible without opening the notch: answering, or answers waiting.
             if sessions.anyWaiting {
                 WaitingBadge(size: 14)
@@ -140,6 +143,19 @@ struct NotchContentView: View {
             }
         }
         .animation(NotchMotion.spring(response: 0.3, damping: 0.7), value: sessions.totalUnread)
+    }
+}
+
+private struct ClosedToolStatus: View {
+    @ObservedObject private var sessions = TerminalSessionStore.shared
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach([Tool.agent(.claude), .agent(.codex), .antigravity], id: \.id) { tool in
+                Circle().fill(sessions.isWaiting(tool) ? Color.orange : sessions.isWorking(tool) ? NotchTheme.accent(for: tool) : .white.opacity(0.22))
+                    .frame(width: 5, height: 5)
+            }
+        }
+        .accessibilityLabel(tr("Status das ferramentas", "Tool status"))
     }
 }
 
