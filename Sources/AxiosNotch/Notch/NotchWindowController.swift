@@ -291,10 +291,9 @@ final class NotchWindowController: NSObject, ObservableObject {
         }
     }
 
-    /// Screen-space rectangle of the surface, with a little slack.
-    private var surfaceArea: CGRect {
+    /// Screen-space rectangle of the surface, optionally with some slack.
+    private func surfaceRect(slack: CGFloat) -> CGRect {
         let surface = surfaceSize
-        let slack: CGFloat = 8
         return CGRect(
             x: geometry.frame.midX - surface.width / 2 - slack,
             y: geometry.frame.maxY - surface.height - slack,
@@ -302,6 +301,8 @@ final class NotchWindowController: NSObject, ObservableObject {
             height: surface.height + slack * 2
         )
     }
+
+    private var surfaceArea: CGRect { surfaceRect(slack: 8) }
 
     private func setWindowFrame() {
         let size = windowSize
@@ -316,8 +317,12 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// The window takes mouse events only while the pointer is over the
     /// surface (with a few points of slack for the hover growth and shadow).
     private func updateMousePassthrough() {
-        let inside = surfaceArea.contains(NSEvent.mouseLocation)
+        let mouse = NSEvent.mouseLocation
+        let inside = surfaceArea.contains(mouse)
         if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
+        // Hover is derived from the pointer too: while the window ignores the
+        // mouse, SwiftUI's onHover never hears the pointer enter.
+        setHovering(surfaceRect(slack: 0).contains(mouse))
     }
 
     /// Is a click (in window coordinates) outside the visible surface?
