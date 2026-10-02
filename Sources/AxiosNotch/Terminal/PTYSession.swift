@@ -34,6 +34,8 @@ enum PTYSession {
         switch tool {
         case .shell: return (shell, ["-l"])
         case .agent(let provider): return (shell, ["-l", "-c", provider.launchCommand])
+        case .antigravity:
+            return (shell, ["-l", "-c", customScript(for: CustomTool(id: "antigravity", name: "Antigravity", command: Tool.antigravityCommand))])
         case .custom(let id):
             // The user's own command, run the way they would type it. A tool that
             // was removed meanwhile falls back to a plain shell.

@@ -5,22 +5,22 @@ import SwiftUI
 /// them with snap (trackpad / wheel) and a rail of icons on the right to jump,
 /// like the iOS 26 Control Center.
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, appearance, tools
+    case general, experience, tools
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
         case .general: return "gearshape.fill"
-        case .appearance: return "paintpalette.fill"
-        case .tools: return "wrench.and.screwdriver.fill"
+        case .experience: return "sparkles"
+        case .tools: return "terminal.fill"
         }
     }
 
     var title: String {
         switch self {
-        case .general: return tr("Ajustes", "Settings")
-        case .appearance: return tr("Aparência", "Appearance")
+        case .general: return tr("Geral", "General")
+        case .experience: return tr("Experiência", "Experience")
         case .tools: return tr("Ferramentas", "Tools")
         }
     }
@@ -33,6 +33,8 @@ struct NotchSettingsView: View {
     /// The scroll position is tracked by the pages' own ids (the strings the
     /// `ForEach` gives them); an explicit `.id` of another type would never match.
     @State private var pageID: SettingsPage.ID? = SettingsPage.general.id
+    @State private var newToolName = ""
+    @State private var newToolCommand = ""
     private var page: SettingsPage { SettingsPage.allCases.first { $0.id == pageID } ?? .general }
 
     private let railWidth: CGFloat = 26
@@ -42,11 +44,10 @@ struct NotchSettingsView: View {
             HStack(spacing: 10) {
                 IconButton(systemName: "chevron.left") { controller.showPicker() }
                     .accessibilityLabel(tr("Voltar", "Back"))
-                Text(page.title)
-                    .font(.system(size: 14, weight: .semibold))
+                // Always "Ajustes": the page you are on is shown by the dots, not by the title.
+                Text(tr("Ajustes", "Settings"))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.white)
-                    .contentTransition(.opacity)
-                    .animation(.easeOut(duration: 0.15), value: pageID)
                 Spacer()
                 AppBadge()
             }
@@ -86,21 +87,23 @@ struct NotchSettingsView: View {
     private func pageContent(_ page: SettingsPage) -> some View {
         switch page {
         case .general: generalPage
-        case .appearance: appearancePage
-        case .tools: ToolsPage()
+        case .experience: experiencePage
+        case .tools: toolsPage
         }
     }
 
-    // A single block: the grid centres it on the page.
-    private var appearancePage: some View {
+    /// Appearance, interaction and notices are kept together: they change how
+    /// Axios feels, rather than its data or registered programs.
+    private var experiencePage: some View {
         CardGridLayout {
             SettingsCard(title: "Design") {
-                Text(tr("Cor de destaque", "Accent color"))
-                HStack(spacing: 9) {
+                HStack(spacing: 0) {
                     ForEach(AccentChoice.allCases) { choice in
                         AccentSwatch(choice: choice, isSelected: settings.accent == choice) { settings.accent = choice }
                     }
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(tr("Cor de destaque", "Accent color"))
                 HStack(spacing: 8) {
                     Text(tr("Tema", "Theme"))
                     Picker("", selection: $settings.terminalTheme) {
@@ -110,7 +113,7 @@ struct NotchSettingsView: View {
                     .pickerStyle(.menu)
                     .frame(maxWidth: .infinity)
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: 4) {
                     Text(tr("Fonte", "Font"))
                     Picker("", selection: $settings.terminalFont) {
                         ForEach(FontChoice.available()) { Text($0.label).tag($0) }
@@ -123,31 +126,10 @@ struct NotchSettingsView: View {
                     Text("\(Int(settings.terminalFontSize))")
                         .monospacedDigit()
                         .foregroundStyle(.white.opacity(0.6))
-                        .frame(width: 20)
+                        .frame(width: 18)
                 }
             }
-        }
-    }
-
-    // Blocks flow two per row; a lone block is centred.
-    private var generalPage: some View {
-        CardGridLayout {
-            SettingsCard(title: tr("Geral", "General")) {
-                Toggle(tr("Iniciar ao fazer login", "Launch at login"), isOn: $settings.launchAtLogin)
-                if let error = settings.loginError {
-                    Caption(error, color: Color(red: 0.95, green: 0.45, blue: 0.4))
-                } else if !LoginItem.isBundled {
-                    Caption(tr("Fora de um .app: usa um LaunchAgent deste binário.", "Outside an .app: uses a LaunchAgent for this binary."))
-                }
-                Toggle(tr("Reabrir abas ao iniciar", "Reopen tabs on launch"), isOn: $settings.reopenTabs)
-                Text(tr("Idioma", "Language"))
-                Picker("", selection: $settings.language) {
-                    ForEach(LanguageChoice.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
-            SettingsCard(title: tr("Vibração e som", "Haptics & sound")) {
+            SettingsCard(title: tr("Interação", "Interaction")) {
                 Toggle(tr("Vibrar ao passar o mouse", "Vibrate on hover"), isOn: $settings.hoverHaptic)
                 Picker("", selection: $settings.hapticStrength) {
                     ForEach(HapticStrength.allCases) { Text($0.label).tag($0) }
@@ -155,38 +137,72 @@ struct NotchSettingsView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .disabled(!settings.hoverHaptic)
-                HStack(spacing: 6) {
-                    Toggle(tr("Som", "Sound"), isOn: $settings.soundOnNotice)
-                    Picker("", selection: $settings.soundChoice) {
-                        ForEach(SoundChoice.allCases) { Text($0.label).tag($0) }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .frame(width: 84)
-                    .disabled(!settings.soundOnNotice)
-                    .onChange(of: settings.soundChoice) { _, choice in NoticeSound.play(choice) }   // preview
-                }
-            }
-            SettingsCard(title: tr("Acessibilidade", "Accessibility")) {
                 Text(tr("Reduzir movimento", "Reduce motion"))
                 Picker("", selection: $settings.motion) {
                     ForEach(MotionPreference.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                Caption(tr("Troca saltos e molas por transições simples.", "Swaps bounces and springs for simple transitions."))
             }
-            SettingsCard(title: tr("Avisos", "Notices")) {
-                Toggle(tr("Aviso de resposta pronta", "Answer-ready notice"), isOn: $settings.finishBanner)
-                HStack {
-                    Text(tr("Duração", "Duration"))
-                    Slider(value: $settings.bannerSeconds, in: 2...10, step: 0.5)
-                        .disabled(!settings.finishBanner)
-                    Text(String(format: "%.1f s", settings.bannerSeconds))
-                        .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.6))
-                        .frame(width: 40, alignment: .trailing)
+            noticesCard
+        }
+    }
+
+    /// Startup and language belong to the app itself, so they get a quiet,
+    /// focused page instead of competing with visual and notification controls.
+    private var generalPage: some View {
+        CardGridLayout {
+            SettingsCard(title: tr("Inicialização", "Startup")) {
+                Toggle(tr("Iniciar ao fazer login", "Launch at login"), isOn: $settings.launchAtLogin)
+                if let error = settings.loginError {
+                    Caption(error, color: Color(red: 0.95, green: 0.45, blue: 0.4))
+                } else if !LoginItem.isBundled {
+                    Caption(tr("Fora de um .app: usa um LaunchAgent deste binário.", "Outside an .app: uses a LaunchAgent for this binary."))
                 }
+                Toggle(tr("Reabrir abas ao iniciar", "Reopen tabs on launch"), isOn: $settings.reopenTabs)
+            }
+            SettingsCard(title: tr("Idioma", "Language")) {
+                Caption(tr("Escolha o idioma da interface.", "Choose the interface language."))
+                Text(tr("Idioma", "Language"))
+                Picker("", selection: $settings.language) {
+                    ForEach(LanguageChoice.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+        }
+    }
+
+    private var toolsPage: some View {
+        CardGridLayout {
+            toolsListCard
+            addToolCard
+            suggestionsCard
+        }
+    }
+
+    private var noticesCard: some View {
+        SettingsCard(title: tr("Avisos", "Notices")) {
+            Toggle(tr("Aviso de resposta pronta", "Answer-ready notice"), isOn: $settings.finishBanner)
+            HStack(spacing: 6) {
+                Toggle(tr("Som", "Sound"), isOn: $settings.soundOnNotice)
+                Picker("", selection: $settings.soundChoice) {
+                    ForEach(SoundChoice.allCases) { Text($0.label).tag($0) }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 84)
+                .disabled(!settings.soundOnNotice)
+                .onChange(of: settings.soundChoice) { _, choice in NoticeSound.play(choice) }
+            }
+            HStack {
+                Text(tr("Duração", "Duration"))
+                Slider(value: $settings.bannerSeconds, in: 2...10, step: 0.5)
+                    .disabled(!settings.finishBanner)
+                Text(String(format: "%.1f s", settings.bannerSeconds))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(width: 40, alignment: .trailing)
             }
         }
     }
@@ -279,7 +295,8 @@ private struct PageRail: View {
 /// Every card shares one size so the grid reads as a clean 2×2.
 enum SettingsLayout {
     static let cardHeight: CGFloat = 138
-    static let spacing: CGFloat = 10
+    /// Enough separation for the rounded corners to read as individual cards.
+    static let spacing: CGFloat = 14
     /// Two rows of cards.
     static let gridHeight: CGFloat = cardHeight * 2 + spacing
     /// One page: the grid plus a little air above and below, so the borders of
@@ -294,12 +311,15 @@ struct SettingsCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.5))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.66))
             content()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // The padding must stay inside CardGridLayout's proposed bounds. If the
+        // frame comes first, padding makes each card 24 pt wider, so neighbours
+        // overlap along their shared edge.
         .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .frame(height: SettingsLayout.cardHeight)
         .background {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -346,78 +366,78 @@ private struct AppBadge: View {
 }
 
 
-/// Register commands to run in the notch next to Claude and Codex (Antigravity,
-/// Aider…). They get a tile in the picker and in the drop strip, and their own tabs.
-struct ToolsPage: View {
-    @ObservedObject private var settings = AppSettings.shared
-    @State private var name = ""
-    @State private var command = ""
+// MARK: Tool cards (the user's extra commands, next to the built-in Claude, Codex, Antigravity, Terminal)
 
-    private var canAdd: Bool {
-        settings.customTools.count < CustomTool.maxCount && CustomTool(name: name, command: command).isValid
+extension NotchSettingsView {
+    private var canAddTool: Bool {
+        settings.customTools.count < CustomTool.maxCount && CustomTool(name: newToolName, command: newToolCommand).isValid
     }
 
-    var body: some View {
-        CardGridLayout {
-            SettingsCard(title: tr("Minhas ferramentas", "My tools")) {
-                if settings.customTools.isEmpty {
-                    Caption(tr("Nenhuma ainda. Cadastre um comando ao lado ou use uma sugestão.", "None yet. Register a command, or pick a suggestion."))
-                } else {
-                    ForEach(settings.customTools) { tool in
-                        HStack(spacing: 7) {
-                            ToolGlyph(tool: .custom(tool.id), size: 16)
-                            Text(tool.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
-                            Text(tool.command)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.4))
-                                .lineLimit(1).truncationMode(.tail)
-                            Spacer(minLength: 2)
-                            Button { settings.removeCustomTool(id: tool.id) } label: {
-                                Image(systemName: "minus.circle.fill").foregroundStyle(.white.opacity(0.45))
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(tr("Remover \(tool.name)", "Remove \(tool.name)"))
+    var toolsListCard: some View {
+        SettingsCard(title: tr("Minhas ferramentas", "My tools")) {
+            if settings.customTools.isEmpty {
+                Caption(tr("Além do Claude, Codex, Antigravity e Terminal. Cadastre um comando ou use uma sugestão.", "Besides Claude, Codex, Antigravity and Terminal. Register a command or pick a suggestion."))
+            } else {
+                ForEach(settings.customTools) { tool in
+                    HStack(spacing: 7) {
+                        ToolGlyph(tool: .custom(tool.id), size: 16)
+                        Text(tool.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
+                        Text(tool.command)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.4))
+                            .lineLimit(1).truncationMode(.tail)
+                        Spacer(minLength: 2)
+                        Button { settings.removeCustomTool(id: tool.id) } label: {
+                            Image(systemName: "minus.circle.fill").foregroundStyle(.white.opacity(0.45))
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(tr("Remover \(tool.name)", "Remove \(tool.name)"))
                     }
                 }
-                Spacer(minLength: 0)
-                Caption(tr("\(settings.customTools.count) de \(CustomTool.maxCount)", "\(settings.customTools.count) of \(CustomTool.maxCount)"))
             }
-            SettingsCard(title: tr("Adicionar", "Add")) {
-                TextField(tr("Nome (ex.: Aider)", "Name (e.g. Aider)"), text: $name)
-                    .textFieldStyle(.roundedBorder)
-                TextField(tr("Comando (ex.: aider)", "Command (e.g. aider)"), text: $command)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(add)
-                Button(action: add) {
-                    Text(tr("Adicionar", "Add")).frame(maxWidth: .infinity)
-                }
-                .disabled(!canAdd)
+            Spacer(minLength: 0)
+            Caption(tr("\(settings.customTools.count) de \(CustomTool.maxCount)", "\(settings.customTools.count) of \(CustomTool.maxCount)"))
+        }
+    }
+
+    var addToolCard: some View {
+        SettingsCard(title: tr("Adicionar", "Add")) {
+            TextField(tr("Nome (ex.: Aider)", "Name (e.g. Aider)"), text: $newToolName)
+                .textFieldStyle(.roundedBorder)
+            TextField(tr("Comando (ex.: aider)", "Command (e.g. aider)"), text: $newToolCommand)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(addTool)
+            Button(action: addTool) {
+                Text(tr("Adicionar", "Add")).frame(maxWidth: .infinity)
             }
-            SettingsCard(title: tr("Sugestões", "Suggestions")) {
-                ForEach(CustomTool.presets, id: \.name) { preset in
-                    let added = settings.customTools.contains { $0.name.lowercased() == preset.name.lowercased() }
-                    Button {
-                        settings.addCustomTool(name: preset.name, command: preset.command)
-                    } label: {
-                        HStack {
-                            Text(preset.name)
-                            Spacer()
-                            Image(systemName: added ? "checkmark" : "plus").font(.system(size: 10, weight: .bold))
-                        }
-                        .contentShape(Rectangle())
+            .disabled(!canAddTool)
+        }
+    }
+
+    var suggestionsCard: some View {
+        SettingsCard(title: tr("Sugestões", "Suggestions")) {
+            ForEach(CustomTool.presets, id: \.name) { preset in
+                let added = settings.customTools.contains { $0.name.lowercased() == preset.name.lowercased() }
+                Button {
+                    settings.addCustomTool(name: preset.name, command: preset.command)
+                } label: {
+                    HStack {
+                        Text(preset.name)
+                        Spacer()
+                        Image(systemName: added ? "checkmark" : "plus").font(.system(size: 10, weight: .bold))
                     }
-                    .buttonStyle(.plain)
-                    .disabled(added || settings.customTools.count >= CustomTool.maxCount)
-                    .opacity(added ? 0.45 : 1)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .disabled(added || settings.customTools.count >= CustomTool.maxCount)
+                .opacity(added ? 0.45 : 1)
             }
         }
     }
 
-    private func add() {
-        guard canAdd, settings.addCustomTool(name: name, command: command) else { return }
-        name = ""
-        command = ""
+    private func addTool() {
+        guard canAddTool, settings.addCustomTool(name: newToolName, command: newToolCommand) else { return }
+        newToolName = ""
+        newToolCommand = ""
     }
 }

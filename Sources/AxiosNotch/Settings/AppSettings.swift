@@ -80,7 +80,7 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// Commands the user registered to run in a tab (Antigravity, Aider…).
+    /// Extra commands the user registered to run in a tab (Aider, OpenCode…).
     @Published private(set) var customTools: [CustomTool] {
         didSet { if let data = try? JSONEncoder().encode(customTools) { defaults.set(data, forKey: "customTools") } }
     }
@@ -90,7 +90,7 @@ final class AppSettings: ObservableObject {
     func addCustomTool(name: String, command: String) -> Bool {
         let tool = CustomTool(name: name, command: command).normalized()
         guard tool.isValid, customTools.count < CustomTool.maxCount else { return false }
-        let taken = Set(customTools.map { $0.name.lowercased() } + ["claude", "codex", "terminal"])
+        let taken = Set(customTools.map { $0.name.lowercased() } + Tool.reservedNames)
         guard !taken.contains(tool.name.lowercased()) else { return false }
         customTools.append(tool)
         return true
@@ -135,8 +135,14 @@ final class AppSettings: ObservableObject {
         // First launch (nothing saved yet): the standard set. Once the user changes the
         // list — even to empty — their choice is what is saved and respected.
         if let data = defaults.data(forKey: "customTools") {
-            let saved = (try? JSONDecoder().decode([CustomTool].self, from: data)).map(CustomTool.migrated) ?? CustomTool.defaults
+            let decoded = try? JSONDecoder().decode([CustomTool].self, from: data)
+            let saved = decoded.map(CustomTool.migrated) ?? CustomTool.defaults
             customTools = saved
+            // Initial property assignment does not invoke `didSet`; commit a legacy-list
+            // migration now so it only has to happen once.
+            if decoded != saved, let migratedData = try? JSONEncoder().encode(saved) {
+                defaults.set(migratedData, forKey: "customTools")
+            }
         } else {
             customTools = CustomTool.defaults
         }

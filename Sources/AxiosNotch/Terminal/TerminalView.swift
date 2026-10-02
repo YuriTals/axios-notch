@@ -146,7 +146,7 @@ struct TerminalPanelView: View {
                 SessionTabs(tool: tool)
                 Spacer(minLength: 4)
                 // Copying "the last answer" needs a screen layout we know; not for unknown tools.
-                if !tool.isCustom { CopyAnswerButton(tool: tool) }
+                if !tool.isOtherCLI { CopyAnswerButton(tool: tool) }
                 OpenFolderButton(tool: tool)
                 Button(action: onClose) {
                     Image(systemName: "xmark.circle.fill")

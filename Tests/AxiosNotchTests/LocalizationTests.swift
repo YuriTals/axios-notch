@@ -63,13 +63,17 @@ final class LocalizationTests: XCTestCase {
 
     func testSettingsLabelsFollowTheLanguage() {
         withLanguage(.en) {
-            XCTAssertEqual(SettingsPage.general.title, "Settings")
+            XCTAssertEqual(SettingsPage.general.title, "General")
+            XCTAssertEqual(SettingsPage.experience.title, "Experience")
+            XCTAssertEqual(SettingsPage.tools.title, "Tools")
             XCTAssertEqual(HapticStrength.strong.label, "Strong")
             XCTAssertEqual(MotionPreference.reduce.label, "Reduce")
             XCTAssertEqual(LanguageChoice.system.label, "System")
         }
         withLanguage(.pt) {
-            XCTAssertEqual(SettingsPage.general.title, "Ajustes")
+            XCTAssertEqual(SettingsPage.general.title, "Geral")
+            XCTAssertEqual(SettingsPage.experience.title, "Experiência")
+            XCTAssertEqual(SettingsPage.tools.title, "Ferramentas")
             XCTAssertEqual(HapticStrength.strong.label, "Forte")
             XCTAssertEqual(LanguageChoice.system.label, "Sistema")
         }

@@ -21,7 +21,7 @@ enum NotchTheme {
         switch tool {
         case .shell: return appAccent
         case .agent(let provider): return accent(for: provider)
-        case .custom(CustomTool.antigravityID): return Color(red: 0.42, green: 0.55, blue: 0.98)
+        case .antigravity: return Color(red: 0.42, green: 0.55, blue: 0.98)
         case .custom: return customAccent(named: tool.displayName())
         }
     }
@@ -38,15 +38,22 @@ enum NotchTheme {
         return Int(hash % 360)
     }
 
+    /// A charcoal surface rather than flat black: it retains the notch's dark
+    /// character while giving panels the depth of a native macOS popover.
+    static let panelFill = LinearGradient(
+        colors: [Color(red: 0.075, green: 0.078, blue: 0.087), Color(red: 0.018, green: 0.019, blue: 0.024)],
+        startPoint: .top, endPoint: .bottom
+    )
+
     static let tileFill = LinearGradient(
-        colors: [.white.opacity(0.10), .white.opacity(0.05)],
+        colors: [.white.opacity(0.115), .white.opacity(0.045)],
         startPoint: .top, endPoint: .bottom
     )
     static let tileHoverFill = LinearGradient(
-        colors: [.white.opacity(0.17), .white.opacity(0.09)],
+        colors: [.white.opacity(0.20), .white.opacity(0.085)],
         startPoint: .top, endPoint: .bottom
     )
-    static let hairline = Color.white.opacity(0.09)
+    static let hairline = Color.white.opacity(0.12)
 }
 
 /// Provider glyph at a given size, shared by the picker tiles and headers.
@@ -73,7 +80,7 @@ struct ToolGlyph: View {
         switch tool {
         case .agent(let provider): ProviderGlyph(provider: provider, size: size)
         case .shell: TerminalIcon().frame(width: size, height: size)
-        case .custom(CustomTool.antigravityID):
+        case .antigravity:
             AntigravityMark().frame(width: size, height: size)
         case .custom:
             let name = tool.displayName()

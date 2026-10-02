@@ -7,11 +7,15 @@ struct NotchPickerView: View {
     @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(tr("Ferramentas ativas", "Active tools"))
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.45))
-                .padding(.leading, 4)
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text(tr("Ferramentas ativas", "Active tools"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.62))
+                Spacer()
+                GearButton { controller.showSettings() }
+            }
+            .padding(.horizontal, 3)
 
             HStack(spacing: 10) {
                 ForEach(Tool.all(customTools: settings.customTools), id: \.id) { tool in
@@ -25,16 +29,9 @@ struct NotchPickerView: View {
                 }
             }
         }
-        .padding(.horizontal, 6)
-        .padding(.bottom, 14)
-        .padding(.top, 4)
-        // Small and out of the way: the tools are the point. It floats in the
-        // top-right corner, above the Terminal tile, without taking a row.
-        .overlay(alignment: .topTrailing) {
-            GearButton { controller.showSettings() }
-                .padding(.trailing, 8)
-                .padding(.top, 3)
-        }
+        .padding(.horizontal, 8)
+        .padding(.bottom, 13)
+        .padding(.top, 5)
     }
 }
 
@@ -46,10 +43,10 @@ private struct GearButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "gearshape.fill")
-                .font(.system(size: 9.5, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.white.opacity(hovering ? 0.95 : 0.6))
-                .frame(width: 20, height: 20)
-                .background(Circle().fill(.white.opacity(hovering ? 0.2 : 0.09)))
+                .frame(width: 23, height: 23)
+                .background(Circle().fill(.white.opacity(hovering ? 0.20 : 0.08)))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(tr("Ajustes", "Settings"))
@@ -69,19 +66,21 @@ private struct ToolTile<Glyph: View>: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
-                glyph().frame(height: 32)
+            VStack(spacing: 7) {
+                glyph()
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(tint.opacity(0.13)))
                 Text(title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(.white.opacity(hovering ? 1 : 0.8))
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 72)
+            .frame(height: 74)
             .background {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(hovering ? NotchTheme.tileHoverFill : NotchTheme.tileFill)
                     .overlay {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .stroke(hovering ? tint.opacity(0.45) : NotchTheme.hairline, lineWidth: 1)
                     }
             }

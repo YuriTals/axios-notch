@@ -19,6 +19,35 @@ resposta termina**.
 
 Requer macOS 14 ou superior.
 
+## Instalar
+
+1. Baixe `AxiosNotch-<versão>.dmg`, abra-o e **arraste o Axios Notch para Aplicativos**.
+2. Abra o app. Ele não tem ícone no Dock: aparece no notch, e o menu da barra (asterisco) tem
+   Ajustes, Pausar e Sair.
+
+**Primeira abertura:** o app ainda não é notarizado pela Apple (isso exige uma conta de desenvolvedor
+paga), então o macOS pode dizer que não conseguiu verificá-lo. Para abrir mesmo assim, vá em
+**Ajustes do Sistema › Privacidade e Segurança**, role até a mensagem sobre o Axios Notch e clique em
+**Abrir Mesmo Assim**. Também funciona, no Terminal:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Axios Notch.app"
+```
+
+## Gerar o instalador
+
+```bash
+scripts/make-dmg.sh                  # build release + build/AxiosNotch-1.0.0.dmg
+VERSION=1.2.0 scripts/make-dmg.sh    # outra versão
+```
+
+O script usa o [dmgbuild](https://github.com/dmgbuild/dmgbuild) e o Pillow num ambiente virtual
+descartável em `build/.dmgvenv` (nada é instalado no sistema), monta a janela de instalação sem
+depender do Finder e, no fim, abre o `.dmg` gerado para conferir que ele contém um app com assinatura
+válida e o atalho para Aplicativos. O fundo da janela vem de `Packaging/dmg-background.png`
+(`scripts/make-dmg-background.py` o redesenha). Para distribuir sem o aviso acima é preciso assinar
+com um certificado Developer ID e notarizar: `CODESIGN_IDENTITY="Developer ID Application: …"`.
+
 ## Rodar
 
 ```bash

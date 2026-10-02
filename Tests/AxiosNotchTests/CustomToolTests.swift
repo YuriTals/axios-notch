@@ -10,37 +10,50 @@ final class CustomToolTests: XCTestCase {
     }
 
     func testToolIDsRoundTripAndRejectJunk() {
-        for tool in [Tool.shell, .agent(.claude), .agent(.codex), .custom("ABC-123")] {
+        for tool in [Tool.shell, .agent(.claude), .agent(.codex), .antigravity, .custom("ABC-123")] {
             XCTAssertEqual(Tool(id: tool.id), tool)
         }
         XCTAssertEqual(Tool.custom("x").id, "custom:x")
+        XCTAssertEqual(Tool.antigravity.id, "antigravity")
         XCTAssertNil(Tool(id: "wat"))
         XCTAssertNil(Tool(id: "custom:"))
         XCTAssertNil(Tool(id: ""))
         XCTAssertEqual(Tool.agent(.codex).agent, .codex)
+        XCTAssertNil(Tool.antigravity.agent, "no usage limits or approval parsing for it")
         XCTAssertNil(Tool.custom("x").agent)
         XCTAssertTrue(Tool.custom("x").isCustom)
+        XCTAssertFalse(Tool.antigravity.isCustom, "it is built in, not a registered command")
+        XCTAssertTrue(Tool.antigravity.isOtherCLI)
+        XCTAssertTrue(Tool.custom("x").isOtherCLI)
+        XCTAssertFalse(Tool.agent(.claude).isOtherCLI)
         XCTAssertTrue(Tool.shell.isShell)
+    }
+
+    func testTabsSavedByEarlierBuildsReopenAsTheBuiltInAntigravity() {
+        // Earlier builds kept it in the custom list, as "custom:gemini" and then "custom:antigravity".
+        XCTAssertEqual(Tool(id: "custom:gemini"), .antigravity)
+        XCTAssertEqual(Tool(id: "custom:antigravity"), .antigravity)
+        XCTAssertEqual(Tool(id: "custom:aider"), .custom("aider"), "other custom tools are untouched")
     }
 
     func testRegisteringToolsValidatesTrimsAndCaps() {
         let (settings, defaults, suite) = makeSettings()
         defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertTrue(settings.customTools.isEmpty, "a fresh install has no extra tools")
 
-        settings.removeCustomTool(id: CustomTool.antigravityID)                         // start from an empty list
-        XCTAssertFalse(settings.addCustomTool(name: "", command: "agy"))
-        XCTAssertFalse(settings.addCustomTool(name: "Antigravity", command: "   "))
-        XCTAssertTrue(settings.addCustomTool(name: "  Antigravity  ", command: " agy --continue "))
-        XCTAssertEqual(settings.customTools.first?.name, "Antigravity")
-        XCTAssertEqual(settings.customTools.first?.command, "agy --continue")
+        XCTAssertFalse(settings.addCustomTool(name: "", command: "aider"))
+        XCTAssertFalse(settings.addCustomTool(name: "Aider", command: "   "))
+        XCTAssertTrue(settings.addCustomTool(name: "  Aider  ", command: " aider --model sonnet "))
+        XCTAssertEqual(settings.customTools.first?.name, "Aider")
+        XCTAssertEqual(settings.customTools.first?.command, "aider --model sonnet")
 
-        XCTAssertFalse(settings.addCustomTool(name: "antigravity", command: "other"), "names are unique, ignoring case")
-        XCTAssertFalse(settings.addCustomTool(name: "Claude", command: "x"), "must not shadow a built-in tile")
-        XCTAssertFalse(settings.addCustomTool(name: "terminal", command: "x"))
+        XCTAssertFalse(settings.addCustomTool(name: "aider", command: "other"), "names are unique, ignoring case")
+        for taken in ["Claude", "Codex", "Antigravity", "terminal"] {
+            XCTAssertFalse(settings.addCustomTool(name: taken, command: "x"), "must not shadow the built-in tile \(taken)")
+        }
 
-        XCTAssertTrue(settings.addCustomTool(name: "Aider", command: "aider"))
         XCTAssertTrue(settings.addCustomTool(name: "Goose", command: "goose"))
-        XCTAssertFalse(settings.addCustomTool(name: "Fourth", command: "x"), "at most \(CustomTool.maxCount) tools")
+        XCTAssertFalse(settings.addCustomTool(name: "Third", command: "x"), "at most \(CustomTool.maxCount) extra tools")
         XCTAssertEqual(settings.customTools.count, CustomTool.maxCount)
 
         XCTAssertEqual(CustomTool(name: String(repeating: "m", count: 40), command: "x").normalized().name.count, CustomTool.maxNameLength)
@@ -55,46 +68,35 @@ final class CustomToolTests: XCTestCase {
 
         let reopened = AppSettings(defaults: defaults)
         XCTAssertEqual(reopened.customTools.map(\.id), ids)
-        XCTAssertEqual(reopened.customTools.map(\.command), ["agy", "aider", "goose session"])
+        XCTAssertEqual(reopened.customTools.map(\.command), ["aider", "goose session"])
 
-        reopened.removeCustomTool(id: ids[1])
-        XCTAssertEqual(AppSettings(defaults: defaults).customTools.map(\.name), ["Antigravity", "Goose"])
+        reopened.removeCustomTool(id: ids[0])
+        XCTAssertEqual(AppSettings(defaults: defaults).customTools.map(\.name), ["Goose"])
         reopened.removeCustomTool(id: "does-not-exist")                                   // harmless
-        XCTAssertEqual(reopened.customTools.count, 2)
+        XCTAssertEqual(reopened.customTools.count, 1)
 
         defaults.set(Data("junk".utf8), forKey: "customTools")
-        XCTAssertEqual(AppSettings(defaults: defaults).customTools, CustomTool.defaults, "corrupt data falls back to the standard set")
+        XCTAssertTrue(AppSettings(defaults: defaults).customTools.isEmpty, "corrupt data must not break launch")
     }
 
-    func testAFreshInstallStartsWithClaudeCodexAntigravityAndTerminal() {
+    func testAFreshInstallShowsClaudeCodexAntigravityAndTerminal() {
         let (settings, defaults, suite) = makeSettings()
         defer { defaults.removePersistentDomain(forName: suite) }
-        XCTAssertEqual(settings.customTools.map(\.name), ["Antigravity"])
-        XCTAssertEqual(settings.customTools.map(\.command), ["agy"])
         XCTAssertEqual(Tool.all(customTools: settings.customTools).map { $0.displayName(customTools: settings.customTools) },
                        ["Claude", "Codex", "Antigravity", "Terminal"])
-        XCTAssertEqual(Tool.all(customTools: settings.customTools)[2], .custom(CustomTool.antigravityID))
+        XCTAssertEqual(Tool.all(customTools: [])[2], .antigravity)
     }
 
-    func testRemovingTheDefaultIsRespectedAndNotBroughtBack() {
-        let (settings, defaults, suite) = makeSettings()
-        defer { defaults.removePersistentDomain(forName: suite) }
-        settings.removeCustomTool(id: CustomTool.antigravityID)
-        XCTAssertTrue(settings.customTools.isEmpty)
-        XCTAssertTrue(AppSettings(defaults: defaults).customTools.isEmpty, "an empty list the user chose must stay empty")
-        XCTAssertTrue(AppSettings(defaults: defaults).addCustomTool(name: "Antigravity", command: "agy"), "and it can be added again")
-    }
-
-    func testTheToolListIsBuiltInThenCustomThenTerminal() {
+    func testTheToolListIsBuiltInThenExtrasThenTerminal() {
         let mine = [CustomTool(id: "a", name: "Aider", command: "aider")]
-        XCTAssertEqual(Tool.all(customTools: mine), [.agent(.claude), .agent(.codex), .custom("a"), .shell])
-        XCTAssertEqual(Tool.all(customTools: []), [.agent(.claude), .agent(.codex), .shell])
+        XCTAssertEqual(Tool.all(customTools: mine), [.agent(.claude), .agent(.codex), .antigravity, .custom("a"), .shell])
         XCTAssertEqual(Tool.custom("a").displayName(customTools: mine), "Aider")
         XCTAssertEqual(Tool.custom("gone").displayName(customTools: mine), tr("Ferramenta", "Tool"))
         XCTAssertEqual(Tool.shell.displayName(customTools: mine), "Terminal")
+        XCTAssertEqual(Tool.antigravity.displayName(customTools: mine), "Antigravity")
     }
 
-    func testLaunchArgumentsRunTheUsersCommandThroughTheLoginShell() {
+    func testLaunchArgumentsRunTheCommandThroughTheLoginShell() {
         let mine = [CustomTool(id: "a", name: "Aider", command: "aider --model sonnet")]
         let launch = PTYSession.launchArguments(for: .custom("a"), customTools: mine)
         XCTAssertEqual(Array(launch.args.prefix(2)), ["-l", "-c"])
@@ -102,69 +104,123 @@ final class CustomToolTests: XCTestCase {
         XCTAssertTrue(launch.args[2].hasPrefix("if command -v aider"), "after checking the program exists")
         XCTAssertEqual(PTYSession.launchArguments(for: .custom("removed"), customTools: mine).args, ["-l"], "a removed tool becomes a plain shell")
         XCTAssertEqual(PTYSession.launchArguments(for: .shell, customTools: mine).args, ["-l"])
+
+        let agy = PTYSession.launchArguments(for: .antigravity, customTools: [])
+        XCTAssertEqual(Array(agy.args.prefix(2)), ["-l", "-c"])
+        XCTAssertTrue(agy.args[2].contains("agy"), agy.args[2])
+        XCTAssertTrue(agy.args[2].hasPrefix("if command -v agy"))
     }
 
-    func testEachToolGetsADistinctStableColour() {
+    func testEachExtraToolGetsADistinctStableColour() {
         XCTAssertEqual(NotchTheme.customHue(for: "Aider"), NotchTheme.customHue(for: "aider"))
         XCTAssertEqual(NotchTheme.customHue(for: "Aider"), NotchTheme.customHue(for: "Aider"))
-        let hues = Set(["Antigravity", "Aider", "OpenCode", "Goose"].map(NotchTheme.customHue))
+        let hues = Set(["Aider", "OpenCode", "Goose", "Cursor"].map(NotchTheme.customHue))
         XCTAssertEqual(hues.count, 4)
         XCTAssertTrue(hues.allSatisfy { (0..<360).contains($0) })
     }
 
-    func testSessionKeysAndTitlesForACustomTool() {
+    func testSessionKeysAndTitlesForTheNewTools() {
         let key = SessionKey(tool: .custom("a"), number: 2)
         XCTAssertEqual(key.id, "custom:a#2")
         XCTAssertNil(key.provider)
+        XCTAssertEqual(SessionKey(tool: .antigravity, number: 1).id, "antigravity#1")
+        XCTAssertEqual(SessionKey(tool: .antigravity, number: 3).fallbackTitle, "Antigravity 3")
         XCTAssertEqual(SessionKey(provider: .claude, number: 1).tool, .agent(.claude))
         XCTAssertEqual(SessionKey(provider: nil, number: 1).tool, .shell)
     }
 
-    func testSavedTabsKeepCustomToolsOnlyWhileTheyStillExist() {
+    func testSavedTabsKeepExtraToolsOnlyWhileTheyExistAndAntigravityAlways() {
         let saved = SavedTabs(tabs: [
             SavedTab(provider: "custom:keep", directory: nil, wasSelected: true),
             SavedTab(provider: "custom:gone", directory: nil, wasSelected: false),
+            SavedTab(provider: "antigravity", directory: nil, wasSelected: false),
+            SavedTab(provider: "custom:gemini", directory: nil, wasSelected: false),      // an earlier build's Gemini/Antigravity
             SavedTab(provider: "claude", directory: nil, wasSelected: false),
             SavedTab(provider: "wat", directory: nil, wasSelected: false),
             SavedTab(provider: nil, directory: nil, wasSelected: false),
         ])
         let tabs = saved.restorable(customToolIDs: ["keep"], folderExists: { _ in true })
-        XCTAssertEqual(tabs.map(\.provider), ["custom:keep", "claude", nil])
+        XCTAssertEqual(tabs.compactMap { $0.provider.flatMap(Tool.init(id:)) },
+                       [.custom("keep"), .antigravity, .antigravity, .agent(.claude)])
+        XCTAssertEqual(tabs.count, 5, "the plain shell comes back too")
     }
 
     func testThePickerGrowsToFitMoreTilesButNeverPastTheTerminalWidth() {
-        let controller = NotchWindowController.pickerWidth(tiles:)
-        XCTAssertEqual(controller(3), 340)
-        XCTAssertEqual(controller(4), 440, "the default four tiles")
-        XCTAssertGreaterThan(controller(5), controller(4))
-        XCTAssertLessThanOrEqual(controller(2 + CustomTool.maxCount + 1), 640, "every tile must fit the window")
+        let width = NotchWindowController.pickerWidth(tiles:)
+        XCTAssertEqual(width(4), 440, "the default four tiles")
+        XCTAssertGreaterThan(width(5), width(4))
+        XCTAssertEqual(width(3 + 1 + CustomTool.maxCount), 640, "the full set exactly fills the panel")
+        XCTAssertLessThanOrEqual(width(3 + 1 + CustomTool.maxCount), 640, "every tile must fit the window")
     }
 
-    /// A custom tool really runs in a tab: a command that prints and then waits.
-    func testACustomToolRunsItsCommandInATab() throws {
+    /// A registered tool really runs in a tab: a command that prints and then waits.
+    func testAnExtraToolRunsItsCommandInATab() throws {
         let store = TerminalSessionStore()
         defer { for key in store.keys { store.close(key) } }
-        let (settings, defaults, suite) = makeSettings()
-        defer { defaults.removePersistentDomain(forName: suite) }
-        _ = settings
-        let tool = CustomTool(id: "t-\(UUID().uuidString.prefix(6))", name: "Eco", command: "echo FERRAMENTA_PERSONALIZADA_OK; sleep 30")
         // The store reads tools from the shared settings, so register it there for the test and tidy up.
         let before = AppSettings.shared.customTools
-        AppSettings.shared.addCustomTool(name: tool.name, command: tool.command)
+        AppSettings.shared.addCustomTool(name: "Eco", command: "echo FERRAMENTA_PERSONALIZADA_OK; sleep 30")
         defer { AppSettings.shared.customTools.map(\.id).filter { id in !before.map(\.id).contains(id) }.forEach { AppSettings.shared.removeCustomTool(id: $0) } }
         let registered = try XCTUnwrap(AppSettings.shared.customTools.first { $0.name == "Eco" })
 
         let key = store.openSession(.custom(registered.id), directory: nil)
-        _ = AppSettings.shared.customTools.count
         let started = expectation(description: "command ran"); DispatchQueue.main.asyncAfter(deadline: .now() + 2) { started.fulfill() }
         wait(for: [started], timeout: 5)
         let screen = String(data: try XCTUnwrap(store.view(for: key)).getTerminal().getBufferAsData(), encoding: .utf8) ?? ""
         XCTAssertTrue(screen.contains("FERRAMENTA_PERSONALIZADA_OK"), screen)
-        XCTAssertEqual(store.title(for: key).isEmpty, false)
         XCTAssertNil(store.lastAnswer(for: key), "no answer copying for tools we cannot read")
     }
 }
 
+final class BuiltInAntigravityTests: XCTestCase {
+    func testGeminiAndTheOldAntigravityEntryAreDroppedFromSavedLists() {
+        let aider = CustomTool(id: "a", name: "Aider", command: "aider")
+        let oldGemini = CustomTool(id: "gemini", name: "Gemini", command: "gemini")
+        let oldAntigravity = CustomTool(id: "antigravity", name: "Antigravity", command: "agy")
+        XCTAssertEqual(CustomTool.migrated([oldGemini, aider, oldAntigravity]), [aider])
+        XCTAssertEqual(CustomTool.migrated([]), [])
+        // Gemini is discontinued, so even an entry that used custom arguments is removed.
+        let edited = CustomTool(id: "gemini", name: "Gemini", command: "gemini --yolo")
+        XCTAssertTrue(CustomTool.migrated([edited]).isEmpty)
+    }
+
+    func testSettingsSavedByAnEarlierBuildLoseTheirAntigravityAndGeminiEntries() throws {
+        let suite = "axios-builtin-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let saved = [CustomTool(id: "antigravity", name: "Antigravity", command: "agy"),
+                     CustomTool(id: "a", name: "Aider", command: "aider")]
+        defaults.set(try JSONEncoder().encode(saved), forKey: "customTools")
+        XCTAssertEqual(AppSettings(defaults: defaults).customTools.map(\.name), ["Aider"])
+    }
+
+    func testMigrationIsPersistedAndGeminiTabsBecomeAntigravity() throws {
+        let suite = "axios-gemini-migration-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let oldGemini = CustomTool(id: "gemini", name: "Gemini", command: "gemini --yolo")
+        defaults.set(try JSONEncoder().encode([oldGemini]), forKey: "customTools")
+
+        XCTAssertTrue(AppSettings(defaults: defaults).customTools.isEmpty)
+        let stored = try XCTUnwrap(defaults.data(forKey: "customTools"))
+        XCTAssertTrue(try JSONDecoder().decode([CustomTool].self, from: stored).isEmpty)
+        XCTAssertEqual(Tool(id: "custom:gemini"), .antigravity)
+    }
+
+    func testGeminiIsNoLongerOfferedAndAntigravityIsNotASuggestion() {
+        let names = CustomTool.presets.map(\.name)
+        XCTAssertFalse(names.contains("Gemini"), "discontinued")
+        XCTAssertFalse(names.contains("Antigravity"), "built in")
+        XCTAssertEqual(names, ["Aider", "OpenCode", "Goose"])
+        XCTAssertNil(CustomTool.installHint(for: "gemini"), "no install advice for the discontinued CLI")
+    }
+
+    func testAntigravityStillExplainsHowToInstallItself() {
+        XCTAssertEqual(CustomTool.installHint(for: "agy --continue"), "curl -fsSL https://antigravity.google/cli/install.sh | bash")
+        XCTAssertEqual(CustomTool.installHint(for: "goose session"), "brew install block-goose-cli")
+        XCTAssertNil(CustomTool.installHint(for: "algo-desconhecido"))
+    }
+}
 
 final class CustomToolLaunchTests: XCTestCase {
     private func run(_ script: String, environment: [String: String] = ["PATH": "/usr/bin:/bin"]) -> (output: String, status: Int32) {
@@ -206,12 +262,12 @@ final class CustomToolLaunchTests: XCTestCase {
         XCTAssertEqual(PTYSession.loginShell(environment: ["SHELL": "/bin/bash"]), "/bin/bash")
     }
 
-    func testTheAntigravityDefaultCarriesItsInstallCommand() {
-        let (output, _) = run(PTYSession.customScript(for: CustomTool.defaultAntigravity, shell: "/bin/echo"))
+    func testAntigravityCarriesItsInstallCommand() {
+        let agy = CustomTool(id: "antigravity", name: "Antigravity", command: Tool.antigravityCommand)
+        let (output, _) = run(PTYSession.customScript(for: agy, shell: "/bin/echo"))
         // The test environment has no agy on its PATH (/usr/bin:/bin), so the hint is shown.
         XCTAssertTrue(output.contains("curl -fsSL https://antigravity.google/cli/install.sh | bash"), output)
         XCTAssertEqual(CustomTool.installHint(for: "agy --continue"), "curl -fsSL https://antigravity.google/cli/install.sh | bash")
-        XCTAssertEqual(CustomTool.installHint(for: "gemini"), "npm install -g @google/gemini-cli", "the old CLI is still a suggestion")
         XCTAssertEqual(CustomTool.installHint(for: "goose session"), "brew install block-goose-cli")
         XCTAssertNil(CustomTool.installHint(for: "algo-desconhecido"))
     }
@@ -245,38 +301,6 @@ final class CustomToolLaunchTests: XCTestCase {
     }
 }
 
-
-final class GeminiMigrationTests: XCTestCase {
-    func testTheUntouchedGeminiDefaultBecomesAntigravityInPlace() {
-        let aider = CustomTool(id: "a", name: "Aider", command: "aider")
-        let migrated = CustomTool.migrated([aider, CustomTool.legacyGemini])
-        XCTAssertEqual(migrated.map(\.id), ["a", CustomTool.antigravityID])
-        XCTAssertEqual(migrated.last?.command, "agy")
-    }
-
-    func testAnEditedGeminiIsLeftAloneAndNothingIsDuplicated() {
-        let edited = CustomTool(id: "gemini", name: "Gemini", command: "gemini --yolo")
-        XCTAssertEqual(CustomTool.migrated([edited]), [edited])
-        XCTAssertEqual(CustomTool.migrated([]), [])
-        XCTAssertEqual(CustomTool.migrated([CustomTool.defaultAntigravity]), [CustomTool.defaultAntigravity])
-        // Both present: keep Antigravity, drop the stale default.
-        XCTAssertEqual(CustomTool.migrated([CustomTool.legacyGemini, CustomTool.defaultAntigravity]), [CustomTool.defaultAntigravity])
-    }
-
-    func testSettingsSavedByAnOlderVersionComeBackAsAntigravity() throws {
-        let suite = "axios-gemini-migration-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(try JSONEncoder().encode([CustomTool.legacyGemini]), forKey: "customTools")
-        XCTAssertEqual(AppSettings(defaults: defaults).customTools, [CustomTool.defaultAntigravity])
-    }
-
-    func testSavedGeminiTabsReopenAsAntigravityButOnlyAfterTheMigration() {
-        XCTAssertEqual(CustomTool.migratedID("gemini", in: [CustomTool.defaultAntigravity]), "antigravity")
-        XCTAssertEqual(CustomTool.migratedID("gemini", in: [CustomTool.legacyGemini]), "gemini", "an edited, still-present Gemini keeps its tabs")
-        XCTAssertEqual(CustomTool.migratedID("aider", in: [CustomTool.defaultAntigravity]), "aider")
-    }
-}
 
 @MainActor
 final class AntigravityMarkTests: XCTestCase {

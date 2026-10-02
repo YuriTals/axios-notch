@@ -32,12 +32,7 @@ struct SavedTabs: Codable, Equatable {
                         return FileManager.default.fileExists(atPath: $0, isDirectory: &isDir) && isDir.boolValue }) -> [SavedTab] {
         var counts: [String: Int] = [:]
         var result: [SavedTab] = []
-        for var tab in tabs {
-            // A tab saved by a version that shipped Gemini reopens as Antigravity.
-            if let name = tab.provider, name.hasPrefix("custom:") {
-                let id = CustomTool.migratedID(String(name.dropFirst(7)), in: AppSettings.shared.customTools)
-                tab.provider = "custom:\(id)"
-            }
+        for tab in tabs {
             if let name = tab.provider {
                 guard let tool = Tool(id: name) else { continue }                  // a tool this version doesn't know
                 if case .custom(let id) = tool, !customToolIDs.contains(id) { continue }   // the user removed it meanwhile

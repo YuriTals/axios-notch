@@ -284,7 +284,7 @@ final class TerminalSessionStore: ObservableObject {
         guard let session = sessions[key] else { return nil }
         let buffer = session.bufferText()
         let text: String
-        if key.tool.isCustom { return nil }                             // an unknown TUI: no reliable way to tell its answer apart
+        if key.tool.isOtherCLI { return nil }                           // a TUI we do not read: no reliable way to tell its answer apart
         if key.tool.isShell {
             // A plain shell scrolls: everything after the last Enter is the output.
             guard let marker = session.lastSubmitMarker else { return nil }
@@ -441,7 +441,7 @@ final class TerminalSessionStore: ObservableObject {
             guard view.getTerminal().bracketedPasteMode else { return false }
             if key.tool.isShell { return true }
             // A tool we know nothing about: no prompt glyph to look for, so give it a beat.
-            if key.tool.isCustom { return Date().timeIntervalSince(startedAt) > 1.5 }
+            if key.tool.isOtherCLI { return Date().timeIntervalSince(startedAt) > 1.5 }
             return screenLines().contains { line in
                 guard let first = line.trimmingCharacters(in: .whitespaces).first else { return false }
                 return first == "❯" || first == "›"
@@ -519,7 +519,7 @@ final class TerminalSessionStore: ObservableObject {
         let mode: ResponseTracker.Mode
         switch key.tool {
         case .shell: mode = .foreground
-        case .agent(.claude), .custom: mode = .silence
+        case .agent(.claude), .antigravity, .custom: mode = .silence
         case .agent(.codex): mode = .marker
         }
         let session = Session(key: key, mode: mode)

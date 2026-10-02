@@ -29,7 +29,7 @@ struct NotchContentView: View {
     var body: some View {
         surface
             .frame(width: controller.surfaceSize.width, height: controller.surfaceSize.height, alignment: .top)
-            .background(Color.black)
+            .background(NotchTheme.panelFill)
             .overlay(alignment: .top) { closeStrip }
             .clipShape(shape)
             .compositingGroup()

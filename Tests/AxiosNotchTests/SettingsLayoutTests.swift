@@ -16,6 +16,12 @@ final class SettingsLayoutTests: XCTestCase {
         XCTAssertEqual(frames[3].maxY, page.height, accuracy: 0.001)
     }
 
+    func testCardsKeepTheConfiguredBreathingRoom() {
+        let frames = CardGridLayout.frames(count: 4, in: page)
+        XCTAssertEqual(frames[1].minX - frames[0].maxX, gap, accuracy: 0.001)
+        XCTAssertEqual(frames[2].minY - frames[0].maxY, gap, accuracy: 0.001)
+    }
+
     func testASingleBlockIsCentredBothWays() {
         let frame = CardGridLayout.frames(count: 1, in: page)[0]
         XCTAssertEqual(frame.midX, page.width / 2, accuracy: 0.001)
@@ -42,7 +48,7 @@ final class SettingsLayoutTests: XCTestCase {
     }
 
     func testSettingsPages() {
-        XCTAssertEqual(SettingsPage.allCases, [.general, .appearance, .tools])
+        XCTAssertEqual(SettingsPage.allCases, [.general, .experience, .tools])
         XCTAssertEqual(SettingsLayout.gridHeight, SettingsLayout.cardHeight * 2 + SettingsLayout.spacing)
         XCTAssertGreaterThan(SettingsLayout.pageHeight, SettingsLayout.gridHeight)       // room at the seam
     }
