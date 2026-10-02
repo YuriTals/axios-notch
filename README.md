@@ -174,10 +174,3 @@ no macOS.
 As fontes originais são distribuídas sob a SIL Open Font License 1.1 (e Hack sob MIT); os textos
 das licenças acompanham os arquivos em `Sources/AxiosNotch/Resources/Fonts/licenses/`. As versões
 "patched" vêm do projeto [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts).
-
-## Créditos
-
-O desenho do notch (orelhas côncavas no topo, cantos inferiores arredondados e a animação de
-mola) é inspirado no [Atoll](https://github.com/Ebullioscopic/Atoll), que é GPL v3. Este projeto
-reimplementa o visual com código próprio e não copia código do Atoll. O logo do Antigravity
-pertence ao Google; o do Claude, à Anthropic; o do Codex, à OpenAI.
