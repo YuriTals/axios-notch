@@ -1,17 +1,18 @@
 <div align="center">
     <img src="docs/app-icon.png" width=200 height=200>
     <h1>Axios Notch</h1>
+    <b>English</b> · <a href="README.pt-BR.md">Português (Brasil)</a>
 </div>
 
 <p align="center">
-  O Axios Notch transforma o notch do MacBook num painel para os seus agentes de código.<br>
-  Mostra quanto do plano de <b>Claude</b> e <b>Codex</b> você já usou, abre terminais sem tirar você<br>
-  do que está fazendo e avisa quando uma resposta termina.
+  Axios Notch turns your MacBook's notch into a panel for your coding agents.<br>
+  It shows how much of your <b>Claude</b> and <b>Codex</b> plan you have used, opens terminals<br>
+  without leaving what you are doing, and tells you when an answer is ready.
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/seletor.png" width="380" alt="Seletor Ferramentas ativas">
-  <img src="docs/screenshots/uso.png" width="380" alt="Uso do plano do Claude">
+  <img src="docs/screenshots/seletor.png" width="380" alt="Active tools picker">
+  <img src="docs/screenshots/uso.png" width="380" alt="Claude plan usage">
 </p>
 
 <p align="center">
@@ -20,48 +21,48 @@
   <img src="https://img.shields.io/badge/requirements-macOS%2014%2B%20%C2%B7%20Apple%20Silicon-fa4e49?style=flat-square" alt="Requirements">
 </p>
 
-## Destaques
+## Highlights
 
-- **Ferramentas ativas:** Claude, Codex, Antigravity, até duas ferramentas suas e um Terminal, num clique.
-- **Uso do plano:** % das janelas de 5 h e semanal de Claude e Codex, com previsão e avisos em 80 % e 90 %.
-- **Terminais persistentes** dentro do notch: copie a última resposta e cole ou arraste imagens, arquivos e pastas.
-- **Avisos:** resposta pronta e pedido de aprovação, com notificação opcional do macOS.
-- **Vários monitores, temas, fontes Nerd Font incluídas**, português e inglês, e um visual Liquid Glass opcional (macOS 26+).
+- **Active tools:** Claude, Codex, Antigravity, up to two tools of your own and a Terminal, one click away.
+- **Plan usage:** % of the 5-hour and weekly windows for Claude and Codex, with a forecast and alerts at 80% and 90%.
+- **Persistent terminals** inside the notch: copy the last answer, and paste or drag images, files and folders.
+- **Notices:** answer ready and approval requests, with an optional macOS notification.
+- **Multiple monitors, themes, bundled Nerd Fonts**, English and Portuguese, and an optional Liquid Glass look (macOS 26+).
 
 <p align="center">
-  <img src="docs/screenshots/terminal.png" width="380" alt="Terminal dentro do notch">
-  <img src="docs/screenshots/ajustes-experiencia.png" width="380" alt="Ajustes">
+  <img src="docs/screenshots/terminal.png" width="380" alt="Terminal inside the notch">
+  <img src="docs/screenshots/ajustes-experiencia.png" width="380" alt="Settings">
 </p>
 
-## Instalar
+## Install
 
-1. Baixe o `AxiosNotch-<versão>.dmg` da [página de Releases](https://github.com/YuriTals/axios-notch/releases/latest) e arraste o app para **Aplicativos**.
-2. Abra o Axios Notch. Ele não tem ícone no Dock: vive no notch e num asterisco na barra de menus.
+1. Download `AxiosNotch-<version>.dmg` from the [Releases page](https://github.com/YuriTals/axios-notch/releases/latest) and drag the app to **Applications**.
+2. Open Axios Notch. It has no Dock icon: it lives in the notch and in an asterisk in the menu bar.
 
-O app ainda não é notarizado pela Apple, então o macOS pode avisar na primeira abertura. Vá em **Ajustes do Sistema › Privacidade e Segurança** e clique em **Abrir Mesmo Assim**, ou rode:
+The app is not notarized by Apple yet, so macOS may warn you the first time. Go to **System Settings › Privacy & Security** and click **Open Anyway**, or run:
 
 ```sh
 xattr -dr com.apple.quarantine "/Applications/Axios Notch.app"
 ```
 
-## Requisitos
+## Requirements
 
-- macOS 14 ou mais novo, em Mac com Apple Silicon. Macs Intel precisam compilar.
-- As CLIs `claude`, `codex` e `agy` instaladas e com login feito, para usar cada ferramenta.
+- macOS 14 or later, on a Mac with Apple Silicon. Intel Macs need to build from source.
+- The `claude`, `codex` and `agy` CLIs installed and signed in, to use each tool.
 
-## Privacidade
+## Privacy
 
-Tudo acontece na sua máquina. Para mostrar o uso do plano, o app lê o login que as CLIs já guardam (Keychain do Claude Code e `~/.codex/auth.json`) e consulta só `api.anthropic.com` e `chatgpt.com`, a cada ~60 s. Ele **não grava, não registra e não renova** tokens. Esses dois endpoints não são documentados e podem mudar sem aviso. O botão de feedback abre o seu app de e-mail com versões e preferências, nunca tokens, conversas ou pastas.
+Everything happens on your machine. To show plan usage, the app reads the login the CLIs already keep (Claude Code's Keychain item and `~/.codex/auth.json`) and only contacts `api.anthropic.com` and `chatgpt.com`, about every 60 s. It does **not store, log or refresh** tokens. Those two endpoints are undocumented and may change without notice. The feedback button opens your mail app with versions and preferences, never tokens, conversations or folders.
 
-## Compilar
+## Build
 
 ```sh
-swift run                   # modo desenvolvimento
-scripts/build-app.sh        # gera "build/Axios Notch.app"
-scripts/make-dmg.sh         # gera build/AxiosNotch-<versão>.dmg
+swift run                   # development mode
+scripts/build-app.sh        # builds "build/Axios Notch.app"
+scripts/make-dmg.sh         # builds build/AxiosNotch-<version>.dmg
 swift test
 ```
 
-## Créditos
+## Credits
 
-O desenho do notch é inspirado no [Atoll](https://github.com/Ebullioscopic/Atoll) (GPL v3); o código é próprio. O terminal usa o [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm). As fontes Nerd Font vêm do projeto [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts), sob SIL OFL 1.1 (Hack, MIT); as licenças estão em `Sources/AxiosNotch/Resources/Fonts/licenses/`. Os logos de Claude, Codex e Antigravity pertencem à Anthropic, à OpenAI e ao Google.
+The notch design is inspired by [Atoll](https://github.com/Ebullioscopic/Atoll) (GPL v3); the code is original. The terminal uses [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm). The Nerd Fonts come from the [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts) project under SIL OFL 1.1 (Hack, MIT); the licenses are in `Sources/AxiosNotch/Resources/Fonts/licenses/`. The Claude, Codex and Antigravity logos belong to Anthropic, OpenAI and Google.
