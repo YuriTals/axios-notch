@@ -4,12 +4,26 @@
 
 <h1 align="center">Axios Notch</h1>
 
-O notch do MacBook como painel para os seus agentes de código. O Axios Notch mostra **quanto
-do plano de Claude e Codex você já usou**, abre **terminais** (Claude, Codex, Antigravity ou um
-shell) sem tirar você do que está fazendo e **avisa quando uma resposta termina**.
+<p align="center">
+  <b>O notch do seu MacBook, agora um painel para os seus agentes de código.</b><br>
+  Uso do plano de Claude e Codex, terminais e avisos de resposta, a um clique.
+</p>
 
-Requer macOS 14 ou superior. O app não tem ícone no Dock: ele vive no notch e num ícone
-(asterisco) na barra de menus.
+<p align="center">
+  <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white">
+  <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white">
+  <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-4c8bf5">
+  <img alt="Testes" src="https://img.shields.io/badge/testes-220%20passando-3fb950">
+  <img alt="Versão" src="https://img.shields.io/badge/vers%C3%A3o-1.0.0-orange">
+</p>
+
+<p align="center">
+  <a href="https://github.com/YuriTals/axios-notch/releases/latest"><b>⬇ Baixar o .dmg</b></a> ·
+  <a href="#o-que-ele-faz">Recursos</a> ·
+  <a href="#instalar">Instalar</a> ·
+  <a href="#o-que-o-app-lê-e-para-onde-envia">Privacidade</a> ·
+  <a href="#compilar">Compilar</a>
+</p>
 
 <p align="center">
   <img src="docs/screenshots/seletor.png" width="420" alt="Seletor Ferramentas ativas">
@@ -19,6 +33,9 @@ Requer macOS 14 ou superior. O app não tem ícone no Dock: ele vive no notch e 
   <img src="docs/screenshots/terminal.png" width="420" alt="Terminal dentro do notch">
   <img src="docs/screenshots/ajustes-experiencia.png" width="420" alt="Ajustes: Experiência">
 </p>
+
+> Requer macOS 14 ou superior, em Mac com Apple Silicon (a versão publicada é arm64; Macs Intel precisam compilar). O app não tem ícone no Dock: ele vive no notch e num ícone
+> (asterisco) na barra de menus. Sem notch (ou num monitor externo), vira uma cápsula no topo da tela.
 
 ## O que ele faz
 
@@ -78,7 +95,7 @@ Engrenagem no seletor, ou "Ajustes…" no menu da barra.
 
 ## Instalar
 
-1. Baixe `AxiosNotch-<versão>.dmg`, abra-o e **arraste o Axios Notch para Aplicativos**.
+1. Baixe o `AxiosNotch-<versão>.dmg` da [página de Releases](https://github.com/YuriTals/axios-notch/releases/latest), abra-o e **arraste o Axios Notch para Aplicativos**.
 2. Abra o app. Ele aparece no notch; o menu da barra tem Ajustes, Pausar e Sair.
 
 **Primeira abertura:** o app ainda não é notarizado pela Apple (isso exige uma conta de
