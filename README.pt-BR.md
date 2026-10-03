@@ -55,7 +55,7 @@ xattr -dr com.apple.quarantine "/Applications/Axios Notch.app"
 
 ## Privacidade
 
-Tudo acontece na sua máquina. Para mostrar o uso do plano, o app lê o login que as CLIs já guardam (Keychain do Claude Code e `~/.codex/auth.json`) e consulta só `api.anthropic.com` e `chatgpt.com`, a cada ~60 s. Ele **não grava, não registra e não renova** tokens. Esses dois endpoints não são documentados e podem mudar sem aviso. O botão de feedback abre o seu app de e-mail com versões e preferências, nunca tokens, conversas ou pastas.
+Tudo acontece na sua máquina. Para mostrar o uso do plano, o app lê o login que as CLIs já guardam (Keychain do Claude Code e `~/.codex/auth.json`) e consulta só `api.anthropic.com` e `chatgpt.com`, a cada ~60 s. Ele **não grava, não registra e não renova** tokens. O app também consulta `api.github.com` pelo último release (ao abrir e a cada ~12 h) para oferecer atualizações; dá para desligar em Ajustes. Esses dois endpoints não são documentados e podem mudar sem aviso. O botão de feedback abre o seu app de e-mail com versões e preferências, nunca tokens, conversas ou pastas.
 
 ## Compilar
 

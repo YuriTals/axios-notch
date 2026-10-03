@@ -7,6 +7,7 @@ struct NotchPickerView: View {
     @ObservedObject var usageStore: AgentUsageStore
     @ObservedObject private var sessions = TerminalSessionStore.shared
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var updates = UpdateStore.shared
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     var body: some View {
@@ -44,7 +45,7 @@ struct NotchPickerView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .accessibilityLabel(tr("Sessões recentes", "Recent sessions"))
-                GearButton { controller.showSettings() }
+                GearButton(badge: updates.availableRelease != nil) { controller.showSettings() }
             }
             .padding(.horizontal, 3)
 
@@ -99,6 +100,7 @@ private struct WelcomeCard: View {
 
 /// Small round settings button.
 private struct GearButton: View {
+    var badge = false
     let action: () -> Void
     @State private var hovering = false
 
@@ -109,9 +111,12 @@ private struct GearButton: View {
                 .foregroundStyle(.white.opacity(hovering ? 0.95 : 0.6))
                 .frame(width: 23, height: 23)
                 .background(Circle().fill(.white.opacity(hovering ? 0.20 : 0.08)))
+                .overlay(alignment: .topTrailing) {
+                    if badge { Circle().fill(Color(red: 0.33, green: 0.58, blue: 0.96)).frame(width: 7, height: 7) }
+                }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(tr("Ajustes", "Settings"))
+        .accessibilityLabel(badge ? tr("Ajustes, atualização disponível", "Settings, update available") : tr("Ajustes", "Settings"))
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.15), value: hovering)
     }

@@ -28,6 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         usageStore.start()
 
         setUpStatusItem()
+        UpdateStore.shared.start()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { WhatsNewWindow.shared.showIfNeeded() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
