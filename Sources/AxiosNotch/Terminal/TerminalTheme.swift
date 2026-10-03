@@ -56,7 +56,11 @@ enum TerminalTheme: String, CaseIterable, Identifiable {
     func apply(to view: LocalProcessTerminalView) {
         let p = palette
         view.installColors(p.ansi.map { $0.map { Self.terminalColor(hex: $0) } } ?? Color.defaultInstalledColors)
-        view.nativeBackgroundColor = NSColor(hex: p.background)
+        let opacity = AppSettings.shared.effectiveTerminalOpacity
+        view.nativeBackgroundColor = NSColor(hex: p.background).withAlphaComponent(opacity)
+        // A see-through terminal needs a layer that is not declared opaque.
+        view.wantsLayer = true
+        view.layer?.isOpaque = opacity >= 1
         view.nativeForegroundColor = NSColor(hex: p.foreground)
     }
 

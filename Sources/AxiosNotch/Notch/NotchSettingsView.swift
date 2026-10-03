@@ -148,6 +148,28 @@ struct NotchSettingsView: View {
                 .labelsHidden()
             }
             noticesCard
+            glassCard
+        }
+    }
+
+    private var glassCard: some View {
+        SettingsCard(title: tr("Vidro", "Glass")) {
+            Toggle("Liquid Glass", isOn: $settings.liquidGlass)
+                .disabled(!AppSettings.glassSupported)
+            if AppSettings.glassSupported {
+                Caption(tr("Painel translúcido, o notch continua preto.", "Translucent panel; the notch strip stays black."))
+            } else {
+                Caption(tr("Requer macOS 26 ou mais novo.", "Requires macOS 26 or later."))
+            }
+            HStack {
+                Text(tr("Terminal", "Terminal"))
+                Slider(value: $settings.terminalOpacity, in: AppSettings.opacityRange)
+                Text("\(Int(settings.terminalOpacity * 100))%")
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(width: 38, alignment: .trailing)
+            }
+            .disabled(!settings.glassActive)
         }
     }
 

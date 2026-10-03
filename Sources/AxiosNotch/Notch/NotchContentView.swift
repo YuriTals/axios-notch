@@ -31,7 +31,7 @@ struct NotchContentView: View {
             .frame(width: controller.surfaceSize.width, height: controller.surfaceSize.height, alignment: .top)
             // The panel itself must merge with the physical camera housing;
             // depth belongs to the cards, never to the notch background.
-            .background(Color.black)
+            .background { panelBackground }
             .overlay(alignment: .top) { closeStrip }
             .clipShape(shape)
             .compositingGroup()
@@ -42,6 +42,21 @@ struct NotchContentView: View {
             .animation(NotchMotion.spring(response: isOpen ? 0.42 : 0.45), value: controller.state)
             .animation(NotchMotion.hover, value: controller.isHovering)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// Black by default. With the Liquid Glass look the open body is glass, but
+    /// the strip around the physical notch stays black so the two still merge.
+    @ViewBuilder
+    private var panelBackground: some View {
+        if #available(macOS 26.0, *), settings.glassActive, isOpen {
+            ZStack(alignment: .top) {
+                Rectangle().fill(.clear)
+                    .glassEffect(.regular.tint(.black.opacity(0.35)), in: shape)
+                Color.black.frame(height: controller.notchStripSize.height)
+            }
+        } else {
+            Color.black
+        }
     }
 
     /// While open, the strip where the physical notch sits is a tap target

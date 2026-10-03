@@ -123,6 +123,14 @@ final class AppSettings: ObservableObject {
             TerminalSessionStore.shared.refreshThemes()
         }
     }
+    /// The optional Liquid Glass look (macOS 26 or later): a translucent panel body.
+    @Published var liquidGlass: Bool {
+        didSet { defaults.set(liquidGlass, forKey: "liquidGlass"); TerminalSessionStore.shared.refreshThemes() }
+    }
+    /// How opaque the terminal background is while the glass look is on.
+    @Published var terminalOpacity: Double {
+        didSet { defaults.set(terminalOpacity, forKey: "terminalOpacity"); TerminalSessionStore.shared.refreshThemes() }
+    }
     @Published var terminalFontSize: Double {
         didSet {
             defaults.set(terminalFontSize, forKey: "terminalFontSize")
@@ -163,7 +171,26 @@ final class AppSettings: ObservableObject {
         terminalFontSize = defaults.object(forKey: "terminalFontSize") as? Double ?? 13
         terminalFont = defaults.string(forKey: "terminalFont").flatMap(FontChoice.init) ?? .auto
         terminalTheme = defaults.string(forKey: "terminalTheme").flatMap(TerminalTheme.init) ?? .standard
+        liquidGlass = defaults.object(forKey: "liquidGlass") as? Bool ?? false
+        terminalOpacity = Self.clampedOpacity(defaults.object(forKey: "terminalOpacity") as? Double ?? 1)
     }
+
+    static let opacityRange: ClosedRange<Double> = 0.3...1
+
+    static func clampedOpacity(_ value: Double) -> Double {
+        min(max(value, opacityRange.lowerBound), opacityRange.upperBound)
+    }
+
+    /// Liquid Glass needs macOS 26; before that the switch does nothing.
+    static var glassSupported: Bool {
+        if #available(macOS 26.0, *) { return true }
+        return false
+    }
+
+    var glassActive: Bool { liquidGlass && Self.glassSupported }
+
+    /// Terminal background alpha: opaque unless the glass look is actually on.
+    var effectiveTerminalOpacity: Double { glassActive ? Self.clampedOpacity(terminalOpacity) : 1 }
 
     /// Whether to tone motion down, honoring the macOS accessibility setting
     /// unless the user picked explicitly.
