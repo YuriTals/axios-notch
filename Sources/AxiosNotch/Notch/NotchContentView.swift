@@ -44,18 +44,30 @@ struct NotchContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    /// Black by default. With the Liquid Glass look the open body is glass, but
-    /// the strip around the physical notch stays black so the two still merge.
-    @ViewBuilder
+    private var glassOpen: Bool {
+        if #available(macOS 26.0, *) { return settings.glassActive && isOpen }
+        return false
+    }
+
+    /// Black by default. With the Liquid Glass look the open body is translucent,
+    /// but the strip around the physical notch stays black and fades softly into it.
+    /// The layers are always in the tree and only change opacity, so they resize with
+    /// the surface while it springs open and shut (swapping views left a ghost).
     private var panelBackground: some View {
-        if #available(macOS 26.0, *), settings.glassActive, isOpen {
-            ZStack(alignment: .top) {
-                Rectangle().fill(.clear)
-                    .glassEffect(.regular.tint(.black.opacity(0.35)), in: shape)
+        ZStack(alignment: .top) {
+            Color.black.opacity(glassOpen ? 0 : 1)
+            Rectangle().fill(.ultraThinMaterial)
+                .overlay(Color.black.opacity(0.35))
+                .environment(\.colorScheme, .dark)
+                .opacity(glassOpen ? 1 : 0)
+            // Solid black over the physical notch, then a soft fade into the glass.
+            VStack(spacing: 0) {
                 Color.black.frame(height: controller.notchStripSize.height)
+                LinearGradient(colors: [.black, .black.opacity(0.55), .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 44)
             }
-        } else {
-            Color.black
+            .opacity(glassOpen ? 1 : 0)
+            .allowsHitTesting(false)
         }
     }
 

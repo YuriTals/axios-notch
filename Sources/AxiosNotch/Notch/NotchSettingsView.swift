@@ -157,7 +157,7 @@ struct NotchSettingsView: View {
             Toggle("Liquid Glass", isOn: $settings.liquidGlass)
                 .disabled(!AppSettings.glassSupported)
             if AppSettings.glassSupported {
-                Caption(tr("Painel translúcido, o notch continua preto.", "Translucent panel; the notch strip stays black."))
+                Caption(tr("Painel translúcido, com degradê suave a partir do notch.", "Translucent panel, fading softly from the notch."))
             } else {
                 Caption(tr("Requer macOS 26 ou mais novo.", "Requires macOS 26 or later."))
             }
