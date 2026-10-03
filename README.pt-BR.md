@@ -62,7 +62,3 @@ scripts/build-app.sh        # gera "build/Axios Notch.app"
 scripts/make-dmg.sh         # gera build/AxiosNotch-<versão>.dmg
 swift test
 ```
-
-## Créditos
-
-O desenho do notch é inspirado no [Atoll](https://github.com/Ebullioscopic/Atoll) (GPL v3); o código é próprio. O terminal usa o [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm). As fontes Nerd Font vêm do projeto [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts), sob SIL OFL 1.1 (Hack, MIT); as licenças estão em `Sources/AxiosNotch/Resources/Fonts/licenses/`. Os logos de Claude, Codex e Antigravity pertencem à Anthropic, à OpenAI e ao Google.
