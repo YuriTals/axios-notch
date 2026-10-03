@@ -19,6 +19,7 @@
   <a href="https://github.com/YuriTals/axios-notch/releases/latest"><img src="https://img.shields.io/badge/download-latest-brightgreen?style=flat-square" alt="Download"></a>
   <img src="https://img.shields.io/badge/platform-macOS-blue?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/requirements-macOS%2014%2B%20%C2%B7%20Apple%20Silicon-fa4e49?style=flat-square" alt="Requirements">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square" alt="License"></a>
 </p>
 
 ## Destaques
@@ -62,6 +63,10 @@ scripts/build-app.sh        # gera "build/Axios Notch.app"
 scripts/make-dmg.sh         # gera build/AxiosNotch-<versão>.dmg
 swift test
 ```
+
+## Licença
+
+O Axios Notch é software livre sob a [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0). Logos, nomes e fontes de terceiros não são cobertos por ela; veja o aviso legal abaixo.
 
 ## Aviso legal
 
