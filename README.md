@@ -33,6 +33,7 @@ com **Claude, Codex, Antigravity**, até duas ferramentas suas e o **Terminal**.
   menu de **sessões recentes** por projeto.
 - Clique com o botão direito num ícone: nova sessão, copiar a última resposta, encerrar sessão.
 - Com o notch fechado, três pontinhos mostram o estado de Claude, Codex e Antigravity.
+- **Vários monitores:** o painel fica no notch do MacBook. Leve o mouse até a borda superior de outro monitor e ele vai para lá (uma cápsula, em telas sem notch); volte à borda do MacBook e ele retorna.
 
 ### Uso do plano
 Claude e Codex mostram a **porcentagem usada** da janela de 5 h e da semana, com a hora em que

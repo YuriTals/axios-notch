@@ -23,4 +23,25 @@ final class NotchGeometryTests: XCTestCase {
         XCTAssertGreaterThan(geometry.frame.height, 0)
         XCTAssertEqual(geometry.frame.maxY, screen.frame.maxY, accuracy: 0.5)
     }
+
+    func testPrefersTheScreenWithTheNotchEvenWhenItIsNotFirst() {
+        XCTAssertEqual(NotchGeometry.preferredIndex(hasNotch: [false, true]), 1)
+        XCTAssertEqual(NotchGeometry.preferredIndex(hasNotch: [true, false]), 0)
+    }
+
+    func testWithoutAnyNotchUsesTheMenuBarScreen() {
+        XCTAssertEqual(NotchGeometry.preferredIndex(hasNotch: [false, false]), 0)
+        XCTAssertEqual(NotchGeometry.preferredIndex(hasNotch: [false]), 0)
+    }
+
+    func testNoScreensMeansNoChoice() {
+        XCTAssertNil(NotchGeometry.preferredIndex(hasNotch: []))
+    }
+
+    func testTopBandIsOnlyTheTopEdgeOfThatScreen() {
+        let frame = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        XCTAssertTrue(NotchGeometry.isInTopBand(CGPoint(x: 900, y: 1070), of: frame))
+        XCTAssertFalse(NotchGeometry.isInTopBand(CGPoint(x: 900, y: 600), of: frame))
+        XCTAssertFalse(NotchGeometry.isInTopBand(CGPoint(x: 2500, y: 1070), of: frame))
+    }
 }

@@ -147,8 +147,12 @@ private struct ToolTile<Glyph: View>: View {
                             .stroke(hovering ? tint.opacity(0.45) : NotchTheme.hairline, lineWidth: 1)
                     }
             }
+            // Plan usage at the top left, session state (active dot, unread count) at the top right.
+            .overlay(alignment: .topLeading) {
+                if let limit { LimitRing(percent: limit.percent, tint: tint).padding(8) }
+            }
             .overlay(alignment: .topTrailing) {
-                HStack(spacing: 4) { if let limit { LimitRing(percent: limit.percent, tint: tint) }; SessionBadge(tool: tool) }.padding(7)
+                SessionBadge(tool: tool).padding(8)
             }
             .scaleEffect(hovering && !AppSettings.shared.reduceMotion ? 1.04 : 1)
             .shadow(color: tint.opacity(hovering ? 0.25 : 0), radius: 10)

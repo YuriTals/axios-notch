@@ -47,6 +47,8 @@ final class NotchWindowController: NSObject, ObservableObject {
 
     private let panel: NotchPanel
     private var geometry: NotchGeometry
+    /// The screen the panel is on now; it follows the pointer to the top edge of another one.
+    private var geometryScreenID: CGDirectDisplayID?
     private var globalMouseMonitor: Any?
     /// Drives the closed-state hover growth; set from the SwiftUI surface.
     @Published private(set) var isHovering = false
@@ -133,7 +135,9 @@ final class NotchWindowController: NSObject, ObservableObject {
     var notchStripSize: CGSize { closedSize }
 
     init(usageStore: AgentUsageStore) {
-        geometry = NotchGeometry.current()
+        let screen = NotchGeometry.preferredScreen()
+        geometry = NotchGeometry.current(for: screen)
+        geometryScreenID = screen.flatMap(NotchGeometry.displayID(of:))
         panel = NotchPanel(contentRect: .zero)
         super.init()
 
@@ -215,7 +219,9 @@ final class NotchWindowController: NSObject, ObservableObject {
     }
 
     @objc private func screenParametersChanged() {
-        geometry = NotchGeometry.current()
+        let screen = NotchGeometry.preferredScreen()
+        geometry = NotchGeometry.current(for: screen)
+        geometryScreenID = screen.flatMap(NotchGeometry.displayID(of:))
         setWindowFrame()
         updateMousePassthrough()
     }
@@ -434,11 +440,24 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// surface (with a few points of slack for the hover growth and shadow).
     private func updateMousePassthrough() {
         let mouse = NSEvent.mouseLocation
+        followPointer(to: mouse)
         let inside = surfaceArea.contains(mouse)
         if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
         // Hover is derived from the pointer too: while the window ignores the
         // mouse, SwiftUI's onHover never hears the pointer enter.
         setHovering(surfaceRect(slack: 0).contains(mouse))
+    }
+
+    /// With several displays the closed panel moves to the one whose top edge the
+    /// pointer reaches (the notch on the MacBook, a capsule on an external monitor).
+    /// An open panel, a banner or a file drag stay where they are.
+    private func followPointer(to mouse: CGPoint) {
+        guard state == .closed, banner == nil, !dragIsFiles,
+              let screen = NSScreen.screens.first(where: { NotchGeometry.isInTopBand(mouse, of: $0.frame) }),
+              let id = NotchGeometry.displayID(of: screen), id != geometryScreenID else { return }
+        geometryScreenID = id
+        geometry = NotchGeometry.current(for: screen)
+        setWindowFrame()
     }
 
     /// Is a click (in window coordinates) outside the visible surface?
