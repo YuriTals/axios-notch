@@ -62,3 +62,7 @@ scripts/build-app.sh        # builds "build/Axios Notch.app"
 scripts/make-dmg.sh         # builds build/AxiosNotch-<version>.dmg
 swift test
 ```
+
+## Disclaimer
+
+Axios Notch is an independent project and is not affiliated with, endorsed by or sponsored by Anthropic, OpenAI, Google or Apple. Claude, Claude Code, Codex, ChatGPT, OpenAI, Antigravity, Gemini, Google, macOS and Apple are trademarks of their respective owners, and the logos and names shown in the app and in this repository belong to them, with all rights reserved to their owners. The bundled Nerd Fonts, and the fonts they are based on, belong to their authors and are distributed under their own licenses (SIL OFL 1.1; Hack under MIT), included in `Sources/AxiosNotch/Resources/Fonts/licenses/`.
