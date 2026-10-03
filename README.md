@@ -21,6 +21,7 @@
   <img src="https://img.shields.io/badge/requirements-macOS%2014%2B%20%C2%B7%20Apple%20Silicon-fa4e49?style=flat-square" alt="Requirements">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square" alt="License"></a>
   <a href="https://buymeacoffee.com/axiosdevteam"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-axiosdevteam-FFDD00?style=flat-square&logo=buy-me-a-coffee&logoColor=000000" alt="Buy Me A Coffee"></a>
+  <a href="https://ko-fi.com/axiosdevteam"><img src="https://img.shields.io/badge/Ko--fi-axiosdevteam-FF5E5B?style=flat-square&logo=ko-fi&logoColor=white" alt="Ko-fi"></a>
 </p>
 
 ## Highlights
