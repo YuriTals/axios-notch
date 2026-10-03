@@ -3,16 +3,22 @@
     <h1>Axios Notch</h1>
 </div>
 
-O Axios Notch transforma o notch do MacBook num painel para os seus agentes de código. Mostra quanto do plano de **Claude** e **Codex** você já usou, abre terminais sem tirar você do que está fazendo e avisa quando uma resposta termina.
-
 <p align="center">
-  <img src="docs/screenshots/seletor.png" width="420" alt="Seletor Ferramentas ativas">
-  <img src="docs/screenshots/uso.png" width="420" alt="Uso do plano do Claude">
+  O Axios Notch transforma o notch do MacBook num painel para os seus agentes de código.<br>
+  Mostra quanto do plano de <b>Claude</b> e <b>Codex</b> você já usou, abre terminais sem tirar você<br>
+  do que está fazendo e avisa quando uma resposta termina.
 </p>
 
-[![Download](https://img.shields.io/badge/download-latest-brightgreen?style=flat-square)](https://github.com/YuriTals/axios-notch/releases/latest)
-![Platform](https://img.shields.io/badge/platform-macOS-blue?style=flat-square)
-![Requirements](https://img.shields.io/badge/requirements-macOS%2014%2B%20%C2%B7%20Apple%20Silicon-fa4e49?style=flat-square)
+<p align="center">
+  <img src="docs/screenshots/seletor.png" width="380" alt="Seletor Ferramentas ativas">
+  <img src="docs/screenshots/uso.png" width="380" alt="Uso do plano do Claude">
+</p>
+
+<p align="center">
+  <a href="https://github.com/YuriTals/axios-notch/releases/latest"><img src="https://img.shields.io/badge/download-latest-brightgreen?style=flat-square" alt="Download"></a>
+  <img src="https://img.shields.io/badge/platform-macOS-blue?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/requirements-macOS%2014%2B%20%C2%B7%20Apple%20Silicon-fa4e49?style=flat-square" alt="Requirements">
+</p>
 
 ## Destaques
 
@@ -23,8 +29,8 @@ O Axios Notch transforma o notch do MacBook num painel para os seus agentes de c
 - **Vários monitores, temas, fontes Nerd Font incluídas**, português e inglês, e um visual Liquid Glass opcional (macOS 26+).
 
 <p align="center">
-  <img src="docs/screenshots/terminal.png" width="420" alt="Terminal dentro do notch">
-  <img src="docs/screenshots/ajustes-experiencia.png" width="420" alt="Ajustes">
+  <img src="docs/screenshots/terminal.png" width="380" alt="Terminal dentro do notch">
+  <img src="docs/screenshots/ajustes-experiencia.png" width="380" alt="Ajustes">
 </p>
 
 ## Instalar
