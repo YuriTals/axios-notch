@@ -114,7 +114,8 @@ private struct CloudShape: Shape {
         path.addEllipse(in: CGRect(x: center.x - distance, y: center.y - distance, width: distance * 2, height: distance * 2))
         for index in 0..<8 {
             let angle = Double(index) * .pi / 4
-            let c = CGPoint(x: center.x + distance * cos(angle), y: center.y + distance * sin(angle))
+            let c = CGPoint(x: center.x + distance * CGFloat(Foundation.cos(angle)),
+                            y: center.y + distance * CGFloat(Foundation.sin(angle)))
             path.addEllipse(in: CGRect(x: c.x - lobe, y: c.y - lobe, width: lobe * 2, height: lobe * 2))
         }
         return path
