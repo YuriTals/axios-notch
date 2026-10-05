@@ -64,40 +64,55 @@ final class TerminalTabsTests: XCTestCase {
         XCTAssertEqual(store.selectedKey(for: .shell), two)
     }
 
-    func testClosingATabReallyEndsItsShell() throws {
-        let key = store.ensureSelected(.shell)
-        let started = expectation(description: "shell started")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { started.fulfill() }
-        wait(for: [started], timeout: 3)
+    /// Direct children of this test process (other tests may leave shells of their own behind).
+    private func childPIDs() throws -> Set<pid_t> {
+        let pgrep = Process()
+        pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        pgrep.arguments = ["-P", "\(getpid())"]
+        let pipe = Pipe(); pgrep.standardOutput = pipe
+        try pgrep.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        pgrep.waitUntilExit()
+        let output = String(data: data, encoding: .utf8) ?? ""
+        return Set(output.split(separator: "\n").compactMap { pid_t($0) }).subtracting([pgrep.processIdentifier])
+    }
 
-        // The shell's pid is visible through its directory lookup; recover it
-        // from the child list of this test process.
-        let children = Process()
-        children.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        children.arguments = ["-P", "\(getpid())"]
-        let pipe = Pipe(); children.standardOutput = pipe
-        try children.run(); children.waitUntilExit()
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let pids = output.split(separator: "\n").compactMap { pid_t($0) }.filter { $0 != children.processIdentifier }
-        let pid = try XCTUnwrap(pids.first, "no shell child found")
+    /// `ps` state letter, or empty when the process is gone. A zombie ("Z") is dead but not yet reaped.
+    private func processState(_ pid: pid_t) throws -> String {
+        let ps = Process()
+        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
+        ps.arguments = ["-o", "state=", "-p", "\(pid)"]
+        let pipe = Pipe(); ps.standardOutput = pipe
+        try ps.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        ps.waitUntilExit()
+        return (String(data: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func testClosingATabReallyEndsItsShell() throws {
+        let before = try childPIDs()
+        let key = store.ensureSelected(.shell)
+
+        // The tab's shell is the child that appeared because of this tab, not just the first one listed.
+        var pid: pid_t = 0
+        let deadline = Date().addingTimeInterval(5)
+        while pid == 0, Date() < deadline {
+            pid = try childPIDs().subtracting(before).first ?? 0
+            if pid == 0 { RunLoop.current.run(until: Date().addingTimeInterval(0.05)) }
+        }
+        XCTAssertNotEqual(pid, 0, "no new shell child found")
+        guard pid != 0 else { return }
         XCTAssertEqual(kill(pid, 0), 0)                            // alive
 
         store.close(key)
 
-        let ended = expectation(description: "shell ended")
-        DispatchQueue.global().async {
-            for _ in 0..<40 where kill(pid, 0) == 0 { Thread.sleep(forTimeInterval: 0.1) }
-            ended.fulfill()
+        // Gone (ESRCH) or dead-but-unreaped (zombie): either way no longer running.
+        var state = try processState(pid)
+        let endBy = Date().addingTimeInterval(8)
+        while !(state.isEmpty || state.hasPrefix("Z")), Date() < endBy {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            state = try processState(pid)
         }
-        wait(for: [ended], timeout: 6)
-        // Reaped zombies report ESRCH; an unreaped one is still "alive" to kill(0)
-        // but is no longer running, so also accept a non-running state.
-        let status = Process()
-        status.executableURL = URL(fileURLWithPath: "/bin/ps")
-        status.arguments = ["-o", "state=", "-p", "\(pid)"]
-        let out = Pipe(); status.standardOutput = out
-        try status.run(); status.waitUntilExit()
-        let state = (String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertTrue(state.isEmpty || state.hasPrefix("Z"), "shell still running, state: \(state)")
     }
 
