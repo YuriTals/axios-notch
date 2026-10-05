@@ -28,6 +28,12 @@ struct LimitForecaster {
     private var samples: [Key: [Sample]] = [:]
     private var lastReset: [Key: Date] = [:]
 
+    mutating func forget(provider: AgentProvider, window: LimitWindow) {
+        let key = Key(provider: provider, window: window)
+        samples[key] = nil
+        lastReset[key] = nil
+    }
+
     mutating func record(provider: AgentProvider, window: LimitWindow, limit: AgentLimit, now: Date) {
         let key = Key(provider: provider, window: window)
         var list = samples[key] ?? []

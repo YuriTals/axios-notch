@@ -24,6 +24,7 @@ enum RateLimitClient {
             switch provider {
             case .claude: limits = try await fetchClaude()
             case .codex: limits = try await fetchCodex()
+            case .antigravity: limits = try await fetchAntigravity()
             }
             return Result(state: .available(limits), succeeded: true, retryAfter: nil)
         } catch let failure as Failure {
@@ -74,10 +75,11 @@ enum RateLimitClient {
         )
     }
 
-    private static func keychainPassword(service: String) -> String? {
+    private static func keychainPassword(service: String, account: String? = nil) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
         process.arguments = ["find-generic-password", "-s", service, "-w"]
+        if let account { process.arguments! += ["-a", account] }
         let out = Pipe()
         process.standardOutput = out
         process.standardError = Pipe()
@@ -89,16 +91,14 @@ enum RateLimitClient {
     }
 
     private static func credentialsFile() -> String? {
-        let base = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
+        let base = AgentDirectories.configuration(for: .claude)
         return try? String(contentsOf: base.appendingPathComponent(".credentials.json"), encoding: .utf8)
     }
 
     // MARK: Codex
 
     private static func fetchCodex() async throws -> AgentRateLimits {
-        let home = ProcessInfo.processInfo.environment["CODEX_HOME"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")
+        let home = AgentDirectories.configuration(for: .codex)
         guard let data = try? Data(contentsOf: home.appendingPathComponent("auth.json")),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tokens = root["tokens"] as? [String: Any],
@@ -131,6 +131,30 @@ enum RateLimitClient {
     }
 
     // MARK: Shared
+
+    private static func fetchAntigravity() async throws -> AgentRateLimits {
+        let home = AgentDirectories.configuration(for: .antigravity)
+        let raw = keychainPassword(service: "gemini", account: "antigravity")
+            ?? (try? String(contentsOf: home.appendingPathComponent("antigravity-oauth-token"), encoding: .utf8))
+        guard let raw, let credentials = AntigravityCredentials.parse(raw) else {
+            throw Failure(message: tr("Entre no Antigravity para ver o limite", "Sign in to Antigravity to see the limit"))
+        }
+        guard credentials.expiresAt > Date() else {
+            throw Failure(message: tr("Sessão expirada — abra o Antigravity para renovar", "Session expired — open Antigravity to renew"))
+        }
+        // Same endpoint as the installed CLI; metadata only, no model invocation.
+        var request = URLRequest(url: URL(string: "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary")!, timeoutInterval: 15)
+        request.httpMethod = "POST"
+        request.httpBody = Data("{}".utf8)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(credentials.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("antigravity", forHTTPHeaderField: "User-Agent")
+        let json = try await jsonResponse(for: request, provider: "Antigravity")
+        guard let limits = RateLimitParser.antigravity(json) else {
+            throw Failure(message: tr("Resposta inesperada do Antigravity", "Unexpected response from Antigravity"))
+        }
+        return limits
+    }
 
     private static func jsonResponse(for request: URLRequest, provider: String) async throws -> Any {
         let (data, response) = try await URLSession.shared.data(for: request)

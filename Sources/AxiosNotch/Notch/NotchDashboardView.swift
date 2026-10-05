@@ -9,6 +9,9 @@ struct NotchUsageView: View {
     let limits: LimitState
     /// Projections from `AgentUsageStore.forecasts`, keyed `provider.window`.
     let forecasts: [String: LimitForecast]
+    var refreshFailure: String? = nil
+    private var fiveHourLimit: AgentLimit? { limits.rateLimits?.mostUsedLimit(in: .fiveHour) }
+    private var weeklyLimit: AgentLimit? { limits.rateLimits?.mostUsedLimit(in: .weekly) }
 
     private var accent: Color { NotchTheme.accent(for: provider) }
 
@@ -17,23 +20,33 @@ struct NotchUsageView: View {
             header
             HStack(spacing: 10) {
                 LimitCard(
-                    title: tr("Janela de 5h", "5h window"), limit: limits.rateLimits?.fiveHour, state: limits, accent: accent,
+                    title: tr("Janela de 5h", "5h window"), limit: fiveHourLimit, state: limits, accent: accent,
                     resetText: { UsageFormat.remaining(until: $0, now: $1) },
-                    footnote: footnote(summary?.fiveHourBlock),
+                    footnote: provider == .antigravity ? tr("maior utilização da conta", "highest account utilization") : footnote(summary?.fiveHourBlock),
                     forecast: forecasts["\(provider.rawValue).\(LimitWindow.fiveHour.rawValue)"]
                 )
                 LimitCard(
-                    title: tr("Semana", "Week"), limit: limits.rateLimits?.weekly, state: limits, accent: accent,
+                    title: tr("Semana", "Week"), limit: weeklyLimit, state: limits, accent: accent,
                     resetText: { date, _ in UsageFormat.weekday(of: date) },
-                    footnote: footnote(summary?.week),
+                    footnote: provider == .antigravity ? tr("maior utilização da conta", "highest account utilization") : footnote(summary?.week),
                     forecast: forecasts["\(provider.rawValue).\(LimitWindow.weekly.rawValue)"]
                 )
             }
-            ModelUsageSection(
-                provider: provider,
-                models: summary?.weekModels ?? [],
-                caps: limits.rateLimits?.modelLimits ?? []
-            )
+            if let refreshFailure {
+                Text(refreshFailure).font(.system(size: 10)).foregroundStyle(.orange).lineLimit(1)
+                    .help(tr("Exibindo a última leitura válida; a atualização falhou.", "Showing the last valid reading; refresh failed."))
+            }
+            if provider == .antigravity {
+                Card(title: tr("Histórico local · 7 dias", "Local history · 7 days"), trailing: nil) {
+                    let tokens = summary?.week.tokens ?? AgentTokens()
+                    Text(tr("\(UsageFormat.tokens(tokens.totalTokens)) tokens · \(UsageFormat.tokens(tokens.cacheRead)) em cache", "\(UsageFormat.tokens(tokens.totalTokens)) tokens · \(UsageFormat.tokens(tokens.cacheRead)) cached"))
+                        .font(.system(size: 12, weight: .medium)).monospacedDigit().foregroundStyle(.white.opacity(0.8))
+                    Text(tr("O histórico do CLI não informa o modelo nem o custo.", "CLI history does not report the model or cost."))
+                        .font(.system(size: 10)).foregroundStyle(.white.opacity(0.4)).lineLimit(1)
+                }.frame(height: 76)
+            } else {
+                ModelUsageSection(provider: provider, models: summary?.weekModels ?? [], caps: limits.rateLimits?.modelLimits ?? [])
+            }
         }
         .padding(.horizontal, 6)
         .padding(.bottom, 14)
@@ -48,15 +61,15 @@ struct NotchUsageView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white)
             Spacer()
-            IconButton(systemName: "terminal.fill", tint: accent, tool: .agent(provider), showsBadge: true) {
-                controller.openTerminal(for: .agent(provider))
+            IconButton(systemName: "terminal.fill", tint: accent, tool: provider.tool, showsBadge: true) {
+                controller.openTerminal(for: provider.tool)
             }
         }
     }
 
     private func footnote(_ window: AgentUsageWindow?) -> String? {
         guard let window, window.tokens.totalTokens > 0 else { return nil }
-        return "\(UsageFormat.tokens(window.tokens.totalTokens)) tokens · \(UsageFormat.cost(window.cost))"
+        return UsageFormat.usageFootnote(window)
     }
 }
 
@@ -260,15 +273,17 @@ private struct ModelUsageSection: View {
             return [NotchTheme.claudeAccent, Color(red: 0.96, green: 0.74, blue: 0.50), Color(red: 0.52, green: 0.72, blue: 0.95), .white.opacity(0.35)]
         case .codex:
             return [NotchTheme.codexAccent, Color(red: 0.70, green: 0.55, blue: 1.0), Color(red: 0.40, green: 0.85, blue: 0.80), .white.opacity(0.35)]
+        case .antigravity:
+            return [NotchTheme.accent(for: AgentProvider.antigravity), .cyan, .purple, .white.opacity(0.35)]
         }
     }
 
     private var slices: [Slice] {
-        let totalCost = models.reduce(0) { $0 + $1.cost }
-        let useCost = totalCost > 0
+        let totalCost = models.reduce(0) { $0 + ($1.cost ?? 0) }
+        let useCost = AgentModelUsage.usesCost(models)
         let total = useCost ? totalCost : Double(models.reduce(0) { $0 + $1.tokens })
         guard total > 0 else { return [] }
-        func value(_ m: AgentModelUsage) -> Double { useCost ? m.cost : Double(m.tokens) }
+        func value(_ m: AgentModelUsage) -> Double { useCost ? (m.cost ?? 0) : Double(m.tokens) }
 
         let top = models.prefix(3)
         var result = top.enumerated().map { index, model in
@@ -291,7 +306,9 @@ private struct ModelUsageSection: View {
     }
 
     var body: some View {
-        Card(title: tr("Por modelo", "By model"), trailing: capsText.map { tr("Limite: \($0)", "Limit: \($0)") } ?? tr("7 dias", "7 days")) {
+        Card(title: !models.isEmpty && !AgentModelUsage.usesCost(models)
+             ? tr("Por modelo · tokens", "By model · tokens") : tr("Por modelo", "By model"),
+             trailing: capsText.map { tr("Limite: \($0)", "Limit: \($0)") } ?? tr("7 dias", "7 days")) {
             if slices.isEmpty {
                 Text(tr("Sem uso nos últimos 7 dias", "No usage in the last 7 days"))
                     .font(.system(size: 11))
@@ -337,6 +354,15 @@ enum UsageFormat {
     }
 
     static func cost(_ value: Double) -> String { String(format: "$%.2f", value) }
+
+    static func cost(_ estimate: AgentCostEstimate) -> String {
+        guard let amount = estimate.amount else { return tr("custo indisponível", "cost unavailable") }
+        return estimate.isPartial ? tr("\(cost(amount)) (parcial)", "\(cost(amount)) (partial)") : cost(amount)
+    }
+
+    static func usageFootnote(_ window: AgentUsageWindow) -> String {
+        "\(tokens(window.tokens.totalTokens)) tokens · \(cost(window.costEstimate))"
+    }
 
     /// " · há 12 min" once data is older than a few minutes; nothing while fresh.
     static func ageSuffix(since fetched: Date, now: Date) -> String {

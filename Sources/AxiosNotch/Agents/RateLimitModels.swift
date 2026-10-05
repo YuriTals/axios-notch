@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 /// How much of a plan's window is used, as the provider itself reports it.
 struct AgentLimit: Equatable, Codable {
@@ -14,13 +15,52 @@ struct AgentModelLimit: Equatable, Identifiable, Codable {
     var limit: AgentLimit
 }
 
+/// Antigravity families have independent quotas; never sum or relabel them.
+struct AgentQuotaGroup: Equatable, Identifiable, Codable {
+    let id: String
+    let label: String
+    var fiveHour: AgentLimit?
+    var weekly: AgentLimit?
+
+}
+
 struct AgentRateLimits: Equatable, Codable {
     var fiveHour: AgentLimit?
     var weekly: AgentLimit?
     /// Only the caps the provider reports and that have been touched.
     var modelLimits: [AgentModelLimit] = []
     var planLabel: String?
+    /// Optional for compatibility with cached Claude/Codex readings.
+    var quotaGroups: [AgentQuotaGroup]? = nil
     var fetchedAt: Date
+
+    func valid(at now: Date, maxAge: TimeInterval = 6 * 3600) -> AgentRateLimits? {
+        guard now.timeIntervalSince(fetchedAt) >= 0, now.timeIntervalSince(fetchedAt) < maxAge else { return nil }
+        func live(_ value: AgentLimit?) -> AgentLimit? {
+            guard let value, value.resetsAt.map({ $0 > now }) ?? true else { return nil }
+            return value
+        }
+        var copy = self
+        copy.fiveHour = live(fiveHour)
+        copy.weekly = live(weekly)
+        copy.modelLimits = modelLimits.compactMap { entry in live(entry.limit).map { AgentModelLimit(label: entry.label, limit: $0) } }
+        copy.quotaGroups = quotaGroups?.compactMap { group in
+            let five = live(group.fiveHour), week = live(group.weekly)
+            guard five != nil || week != nil else { return nil }
+            return AgentQuotaGroup(id: group.id, label: group.label, fiveHour: five, weekly: week)
+        }
+        return copy.fiveHour == nil && copy.weekly == nil && copy.modelLimits.isEmpty && (copy.quotaGroups?.isEmpty ?? true) ? nil : copy
+    }
+
+    /// Account overview: the most consumed real bucket in each window.
+    /// Independent buckets must never be added or averaged into a fake quota.
+    func mostUsedLimit(in window: LimitWindow) -> AgentLimit? {
+        let direct = window == .fiveHour ? fiveHour : weekly
+        return direct ?? quotaGroups?.compactMap { window == .fiveHour ? $0.fiveHour : $0.weekly }
+            .max(by: { $0.percent < $1.percent })
+    }
+
+    var pickerLimit: AgentLimit? { mostUsedLimit(in: .fiveHour) }
 }
 
 /// What the UI knows about a provider's limits right now.
@@ -32,6 +72,32 @@ enum LimitState: Equatable {
 }
 
 enum RateLimitParser {
+    /// Read-only quota summary used by `agy /usage`. No assumed window duration.
+    static func antigravity(_ json: Any, now: Date = Date()) -> AgentRateLimits? {
+        guard let root = json as? [String: Any] else { return nil }
+        let rawGroups = root["groups"] as? [[String: Any]] ?? []
+        let groups = rawGroups.compactMap { group -> AgentQuotaGroup? in
+            guard let label = group["displayName"] as? String,
+                  let buckets = group["buckets"] as? [[String: Any]] else { return nil }
+            func limit(_ window: String) -> AgentLimit? {
+                guard let bucket = buckets.first(where: { $0["window"] as? String == window && $0["disabled"] as? Bool != true }),
+                      let value = bucket["remainingFraction"] as? NSNumber,
+                      CFGetTypeID(value) != CFBooleanGetTypeID() else { return nil }
+                let remaining = value.doubleValue
+                guard remaining.isFinite,
+                      (0...1).contains(remaining),
+                      let reset = (bucket["resetTime"] as? String).flatMap(ClaudeUsageReader.parseTimestamp), reset > now else { return nil }
+                return AgentLimit(percent: (1 - remaining) * 100, resetsAt: reset)
+            }
+            let five = limit("5h"), week = limit("weekly")
+            guard five != nil || week != nil else { return nil }
+            // Bucket IDs identify the family even when its display label changes.
+            let ids = buckets.compactMap { $0["bucketId"] as? String }.sorted().joined(separator: "|")
+            return AgentQuotaGroup(id: ids.isEmpty ? label : ids, label: label, fiveHour: five, weekly: week)
+        }
+        guard !groups.isEmpty else { return nil }
+        return AgentRateLimits(quotaGroups: groups, fetchedAt: now)
+    }
     /// `GET api.anthropic.com/api/oauth/usage` →
     /// `{ five_hour: { utilization, resets_at }, seven_day: { … } }`
     static func claude(_ json: Any, plan: String?, now: Date = Date()) -> AgentRateLimits? {
@@ -85,9 +151,10 @@ enum RateLimitParser {
             return AgentLimit(percent: percent, resetsAt: reset)
         }
 
-        let sorted = windows.sorted { (minutes($0) ?? 0) < (minutes($1) ?? 0) }
-        let short = sorted.first.flatMap(limit)
-        let long = sorted.count > 1 ? sorted.last.flatMap(limit) : nil
+        // A single weekly window is still weekly. Unknown durations must not
+        // acquire a misleading label from their position in the response.
+        let short = windows.first(where: { minutes($0) == 300 }).flatMap(limit)
+        let long = windows.first(where: { minutes($0) == 10080 }).flatMap(limit)
         guard short != nil || long != nil else { return nil }
         return AgentRateLimits(fiveHour: short, weekly: long, planLabel: root["plan_type"] as? String, fetchedAt: now)
     }

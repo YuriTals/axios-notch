@@ -4,6 +4,17 @@ import XCTest
 final class RateLimitParserTests: XCTestCase {
     private func json(_ text: String) -> Any { try! JSONSerialization.jsonObject(with: Data(text.utf8)) }
 
+    func testSingleWindowsKeepTheirActualDuration() {
+        let weekly = RateLimitParser.codex(json(#"{"rate_limit":{"secondary_window":{"used_percent":60,"limit_window_seconds":604800}}}"#))
+        XCTAssertNil(weekly?.fiveHour)
+        XCTAssertEqual(weekly?.weekly?.percent, 60)
+        let short = RateLimitParser.codex(json(#"{"primary":{"used_percent":10,"window_minutes":300}}"#))
+        XCTAssertEqual(short?.fiveHour?.percent, 10)
+        XCTAssertNil(short?.weekly)
+        XCTAssertNil(RateLimitParser.codex(json(#"{"primary":{"used_percent":10}}"#)))
+        XCTAssertNil(RateLimitParser.codex(json(#"{"primary":{"used_percent":10,"window_minutes":60}}"#)))
+    }
+
     func testClaudeUsageReadsPercentAndResetForBothWindows() {
         let limits = RateLimitParser.claude(json("""
         {"five_hour":{"utilization":5.0,"resets_at":"2026-10-02T01:59:59.907933+00:00"},

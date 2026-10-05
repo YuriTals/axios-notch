@@ -65,18 +65,7 @@ enum LimitCache {
     /// describes anything.
     static func load(for provider: AgentProvider, now: Date = Date(), defaults: UserDefaults = .standard) -> AgentRateLimits? {
         guard let data = defaults.data(forKey: key(provider)),
-              var limits = try? JSONDecoder().decode(AgentRateLimits.self, from: data),
-              now.timeIntervalSince(limits.fetchedAt) < maxAge else { return nil }
-        func live(_ limit: AgentLimit?) -> AgentLimit? {
-            guard let limit else { return nil }
-            if let reset = limit.resetsAt, reset <= now { return nil }
-            return limit
-        }
-        limits.fiveHour = live(limits.fiveHour)
-        limits.weekly = live(limits.weekly)
-        limits.modelLimits = limits.modelLimits.compactMap { entry in
-            live(entry.limit).map { AgentModelLimit(label: entry.label, limit: $0) }
-        }
-        return limits.fiveHour == nil && limits.weekly == nil ? nil : limits
+              let limits = try? JSONDecoder().decode(AgentRateLimits.self, from: data) else { return nil }
+        return limits.valid(at: now, maxAge: maxAge)
     }
 }

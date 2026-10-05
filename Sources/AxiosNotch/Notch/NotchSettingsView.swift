@@ -209,39 +209,45 @@ struct NotchSettingsView: View {
 
     private var updatesCard: some View {
         SettingsCard(title: tr("Atualizações", "Updates")) {
-            Caption(tr("Versão \(updates.currentVersion)", "Version \(updates.currentVersion)"))
-            switch updates.state {
-            case .idle, .upToDate:
-                Caption(updates.state == .upToDate ? tr("Você está na versão mais recente.", "You are up to date.") : "")
-            case .checking:
-                Caption(tr("Verificando…", "Checking…"))
-            case .available(let release):
-                Text(tr("Versão \(release.version) disponível", "Version \(release.version) available"))
-                    .font(.system(size: 12, weight: .semibold))
-            case .downloading:
-                Caption(tr("Baixando e conferindo o SHA-256…", "Downloading and checking the SHA-256…"))
-            case .installing:
-                Caption(tr("Instalando e reiniciando…", "Installing and restarting…"))
-            case .failed(let message):
-                Caption(message, color: Color(red: 0.95, green: 0.45, blue: 0.4))
-            }
-            if let release = updates.availableRelease {
-                if updates.canInstall && release.sha256 != nil {
-                    Button(action: { Task { await updates.install() } }) {
-                        Text(tr("Atualizar e reiniciar", "Update and restart")).frame(maxWidth: .infinity)
+            if BuildChannel.isTest {
+                TestBuildBadge()
+                Caption(tr("Homologação interna. Versão \(updates.currentVersion).", "Internal acceptance. Version \(updates.currentVersion)."))
+                Caption(tr("Atualizações de produção desativadas nesta build.", "Production updates are disabled in this build."))
+            } else {
+                Caption(tr("Versão \(updates.currentVersion)", "Version \(updates.currentVersion)"))
+                switch updates.state {
+                case .idle, .upToDate:
+                    Caption(updates.state == .upToDate ? tr("Você está na versão mais recente.", "You are up to date.") : "")
+                case .checking:
+                    Caption(tr("Verificando…", "Checking…"))
+                case .available(let release):
+                    Text(tr("Versão \(release.version) disponível", "Version \(release.version) available"))
+                        .font(.system(size: 12, weight: .semibold))
+                case .downloading:
+                    Caption(tr("Baixando e conferindo o SHA-256…", "Downloading and checking the SHA-256…"))
+                case .installing:
+                    Caption(tr("Instalando e reiniciando…", "Installing and restarting…"))
+                case .failed(let message):
+                    Caption(message, color: Color(red: 0.95, green: 0.45, blue: 0.4))
+                }
+                if let release = updates.availableRelease {
+                    if updates.canInstall && release.sha256 != nil {
+                        Button(action: { Task { await updates.install() } }) {
+                            Text(tr("Atualizar e reiniciar", "Update and restart")).frame(maxWidth: .infinity)
+                        }
+                    } else {
+                        Button(action: { updates.openReleasePage() }) {
+                            Text(tr("Abrir página do release", "Open the release page")).frame(maxWidth: .infinity)
+                        }
                     }
                 } else {
-                    Button(action: { updates.openReleasePage() }) {
-                        Text(tr("Abrir página do release", "Open the release page")).frame(maxWidth: .infinity)
+                    Button(action: { Task { await updates.check() } }) {
+                        Text(tr("Verificar agora", "Check now")).frame(maxWidth: .infinity)
                     }
+                    .disabled(updates.state == .checking)
                 }
-            } else {
-                Button(action: { Task { await updates.check() } }) {
-                    Text(tr("Verificar agora", "Check now")).frame(maxWidth: .infinity)
-                }
-                .disabled(updates.state == .checking)
+                Toggle(tr("Verificar automaticamente", "Check automatically"), isOn: $updates.automaticChecks)
             }
-            Toggle(tr("Verificar automaticamente", "Check automatically"), isOn: $updates.automaticChecks)
         }
     }
 
@@ -502,7 +508,7 @@ extension NotchSettingsView {
                 }
             }
             Spacer(minLength: 0)
-            Caption(tr("\(settings.customTools.count) de \(CustomTool.maxCount)", "\(settings.customTools.count) of \(CustomTool.maxCount)"))
+            Caption(settings.customToolRemovalError ?? tr("\(settings.customTools.count) de \(CustomTool.maxCount)", "\(settings.customTools.count) of \(CustomTool.maxCount)"))
         }
     }
 

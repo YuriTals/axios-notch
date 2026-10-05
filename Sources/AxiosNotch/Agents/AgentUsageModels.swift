@@ -1,10 +1,14 @@
 import Foundation
 
-/// A coding CLI whose local session logs Axios Notch reads. No API keys, no
-/// network calls — everything comes from files the CLI already writes to disk.
+/// A coding CLI whose local history Axios Notch reads. Plan quotas are
+/// fetched separately using the CLI's existing sign-in.
 enum AgentProvider: String, CaseIterable, Identifiable, Codable {
     case claude
     case codex
+    case antigravity
+
+    /// Keep Antigravity's terminal semantics separate from screen-parsed agents.
+    var tool: Tool { self == .antigravity ? .antigravity : .agent(self) }
 
     var id: String { rawValue }
 
@@ -12,6 +16,7 @@ enum AgentProvider: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .claude: return "Claude"
         case .codex: return "Codex"
+        case .antigravity: return "Antigravity"
         }
     }
 
@@ -19,6 +24,7 @@ enum AgentProvider: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .claude: return "sparkles"
         case .codex: return "chevron.left.forwardslash.chevron.right"
+        case .antigravity: return "triangle"
         }
     }
 
@@ -27,11 +33,13 @@ enum AgentProvider: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .claude: return "claude"
         case .codex: return "codex"
+        case .antigravity: return "agy"
         }
     }
 }
 
-/// Token counts in a shape both providers' logs can be reduced to.
+/// Disjoint input/cache buckets; `output` includes reasoning, which is
+/// retained separately for detail and must never be billed a second time.
 struct AgentTokens: Equatable, Codable {
     var input = 0
     var cacheWrite = 0
@@ -56,6 +64,15 @@ struct AgentTokens: Equatable, Codable {
     static func += (lhs: inout AgentTokens, rhs: AgentTokens) {
         lhs = lhs + rhs
     }
+
+    /// Provider counters can reset; each negative component then contributes zero.
+    func subtracting(_ previous: AgentTokens) -> AgentTokens {
+        AgentTokens(input: max(0, input - previous.input),
+                    cacheWrite: max(0, cacheWrite - previous.cacheWrite),
+                    cacheRead: max(0, cacheRead - previous.cacheRead),
+                    output: max(0, output - previous.output),
+                    reasoning: max(0, reasoning - previous.reasoning))
+    }
 }
 
 /// One billed response, reduced to just what the dashboard needs: when it
@@ -70,6 +87,8 @@ struct AgentUsageEvent {
     /// Claude Code logs one response several times, once per content block,
     /// so events sharing an id replace each other instead of adding up.
     var id: String? = nil
+    /// The log that owns this event, so replacement/removal can invalidate it.
+    var source: URL? = nil
 }
 
 /// A calendar day, used to bucket events without caring about time zones or
@@ -91,25 +110,49 @@ struct DayKey: Hashable, Comparable {
     }
 }
 
+/// A subtotal of priced usage, with missing tariffs kept distinct from zero.
+struct AgentCostEstimate: Equatable {
+    private(set) var amount: Double?
+    private(set) var hasUnpricedUsage = false
+
+    var isPartial: Bool { amount != nil && hasUnpricedUsage }
+    var isComplete: Bool { amount != nil && !hasUnpricedUsage }
+    var hasUsage: Bool { amount != nil || hasUnpricedUsage }
+
+    mutating func add(_ cost: Double?, tokens: Int) {
+        guard tokens > 0 else { return }
+        if let cost { amount = (amount ?? 0) + cost }
+        else { hasUnpricedUsage = true }
+    }
+
+    mutating func merge(_ other: AgentCostEstimate) {
+        if let cost = other.amount { amount = (amount ?? 0) + cost }
+        hasUnpricedUsage = hasUnpricedUsage || other.hasUnpricedUsage
+    }
+}
+
 /// One day's worth of spend, for the activity heatmap.
 struct AgentDailyActivity: Equatable, Identifiable {
     var id: DayKey { day }
     let day: DayKey
-    var cost: Double
+    var costEstimate: AgentCostEstimate
+    var cost: Double? { costEstimate.amount }
 }
 
 /// A named slice of today's spend — one model or one project.
 struct AgentNamedSpend: Equatable, Identifiable {
     var id: String { name }
     let name: String
-    let cost: Double
+    let costEstimate: AgentCostEstimate
+    var cost: Double? { costEstimate.amount }
 }
 
 /// Tokens and estimated spend over some stretch of time. `start`/`end` are
 /// only set for the 5-hour session block.
 struct AgentUsageWindow: Equatable {
     var tokens = AgentTokens()
-    var cost: Double = 0
+    var costEstimate = AgentCostEstimate()
+    var cost: Double? { costEstimate.amount }
     var start: Date?
     var end: Date?
 }
@@ -120,7 +163,23 @@ struct AgentModelUsage: Equatable, Identifiable {
     /// Raw model id from the logs.
     let name: String
     var tokens: Int
-    var cost: Double
+    var costEstimate = AgentCostEstimate()
+    var cost: Double? { costEstimate.amount }
+
+    /// Use tokens for every slice when any displayed model lacks a tariff.
+    static func usesCost(_ models: [AgentModelUsage]) -> Bool {
+        !models.isEmpty && models.allSatisfy { $0.costEstimate.isComplete }
+            && models.reduce(0) { $0 + ($1.cost ?? 0) } > 0
+    }
+
+    static func ranked(_ models: [AgentModelUsage]) -> [AgentModelUsage] {
+        let byCost = usesCost(models)
+        return models.sorted {
+            let lhs = byCost ? ($0.cost ?? 0) : Double($0.tokens)
+            let rhs = byCost ? ($1.cost ?? 0) : Double($1.tokens)
+            return lhs == rhs ? $0.name < $1.name : lhs > rhs
+        }
+    }
 }
 
 /// What the notch shows for one provider: today's usage plus the richer
@@ -129,19 +188,22 @@ struct AgentUsageSummary: Equatable {
     let provider: AgentProvider
     var todayTokens = AgentTokens()
     var latestSessionTokens = AgentTokens()
-    var estimatedCostToday: Double?
+    var todayCostEstimate = AgentCostEstimate()
+    var estimatedCostToday: Double? { todayCostEstimate.amount }
     var lastActivity: Date?
     var hasAnySession = false
 
     /// Index 0...23, one bucket per hour of today, in $.
-    var hourlySpendToday: [Double] = Array(repeating: 0, count: 24)
+    var hourlyCostEstimatesToday = Array(repeating: AgentCostEstimate(), count: 24)
+    var hourlySpendToday: [Double?] { hourlyCostEstimatesToday.map(\.amount) }
     /// Sorted by cost, highest first.
     var modelSpendToday: [AgentNamedSpend] = []
     /// Sorted by cost, highest first.
     var projectSpendToday: [AgentNamedSpend] = []
     /// Ascending by day, covering the aggregator's retention window.
     var dailyHistory: [AgentDailyActivity] = []
-    var totalCostInHistory: Double = 0
+    var historyCostEstimate = AgentCostEstimate()
+    var totalCostInHistory: Double? { historyCostEstimate.amount }
     var activeDaysInHistory: Int = 0
     var busiestDay: AgentDailyActivity?
 
@@ -152,7 +214,8 @@ struct AgentUsageSummary: Equatable {
     /// Rolling last 7 days.
     var week = AgentUsageWindow()
     /// Spend per day for the last 7 days, oldest first, today last.
-    var weekDailyCost: [Double] = Array(repeating: 0, count: 7)
+    var weekDailyCostEstimates = Array(repeating: AgentCostEstimate(), count: 7)
+    var weekDailyCost: [Double?] { weekDailyCostEstimates.map(\.amount) }
     /// Last 7 days split by model, biggest first.
     var weekModels: [AgentModelUsage] = []
 }

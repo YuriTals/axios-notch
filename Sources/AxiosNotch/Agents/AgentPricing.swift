@@ -29,7 +29,7 @@ enum AgentPricing {
 
         let inputCost = Double(tokens.input + tokens.cacheWrite) / 1_000_000 * rate.inputPer1M
         let cacheReadCost = Double(tokens.cacheRead) / 1_000_000 * rate.cacheReadPer1M
-        let outputCost = Double(tokens.output + tokens.reasoning) / 1_000_000 * rate.outputPer1M
+        let outputCost = Double(tokens.output) / 1_000_000 * rate.outputPer1M
         return inputCost + cacheReadCost + outputCost
     }
 }

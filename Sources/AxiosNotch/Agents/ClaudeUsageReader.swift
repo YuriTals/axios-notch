@@ -9,6 +9,7 @@ final class ClaudeUsageReader {
     private let calendar: Calendar
     private let tailReader = JSONLTailReader()
     private let aggregator: AgentUsageAggregator
+    private let fileIndex: SessionFileIndex
 
     /// Per-file running token total, used only for "latest session" — a
     /// separate concern from the aggregator's date/model/project breakdown.
@@ -18,26 +19,36 @@ final class ClaudeUsageReader {
         self.root = root
         self.calendar = calendar
         self.aggregator = AgentUsageAggregator(calendar: calendar)
+        self.fileIndex = SessionFileIndex(root: root, calendar: calendar)
     }
 
     static var defaultRoot: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/projects")
+        AgentDirectories.configuration(for: .claude).appendingPathComponent("projects", isDirectory: true)
     }
 
     /// Rescans every session file under `root`, reading only what changed
     /// since the last call, and returns the current summary.
     func refresh(now: Date = Date()) -> AgentUsageSummary {
         var summary = AgentUsageSummary(provider: .claude)
-        let files = recentSessionFiles(now: now)
+        let files = fileIndex.files(now: now)
+        let active = Set(files)
+        tailReader.retainFiles(active)
+        latestTokensByFile = latestTokensByFile.filter { active.contains($0.key) }
+        aggregator.retainSources(active)
         summary.hasAnySession = !files.isEmpty
 
         for file in files {
-            guard let lines = tailReader.newLines(in: file) else { continue }
+            guard let read = tailReader.read(in: file) else { continue }
+            if read.wasReset {
+                latestTokensByFile[file] = nil
+                aggregator.removeEvents(from: file)
+            }
             var sessionTokens = latestTokensByFile[file] ?? [:]
-            for line in lines {
+            for line in read.lines {
                 guard let entry = Self.parseAssistantUsage(line) else { continue }
                 let date = entry.timestamp ?? now
-                aggregator.ingest(AgentUsageEvent(date: date, model: entry.model, project: entry.project, tokens: entry.tokens, id: entry.id))
+                let id = entry.id.map { file.path + ":" + $0 }
+                aggregator.ingest(AgentUsageEvent(date: date, model: entry.model, project: entry.project, tokens: entry.tokens, id: id, source: file))
                 // Entries without an id are never duplicates; give each its own slot.
                 sessionTokens[entry.id ?? UUID().uuidString] = entry.tokens
             }
@@ -46,17 +57,17 @@ final class ClaudeUsageReader {
 
         let breakdown = aggregator.snapshot(now: now)
         summary.todayTokens = breakdown.todayTokens
-        summary.estimatedCostToday = breakdown.estimatedCostToday
-        summary.hourlySpendToday = breakdown.hourlySpendToday
+        summary.todayCostEstimate = breakdown.todayCostEstimate
+        summary.hourlyCostEstimatesToday = breakdown.hourlyCostEstimatesToday
         summary.modelSpendToday = breakdown.modelSpendToday
         summary.projectSpendToday = breakdown.projectSpendToday
         summary.dailyHistory = breakdown.dailyHistory
-        summary.totalCostInHistory = breakdown.totalCostInHistory
+        summary.historyCostEstimate = breakdown.historyCostEstimate
         summary.activeDaysInHistory = breakdown.activeDaysInHistory
         summary.busiestDay = breakdown.busiestDay
         summary.fiveHourBlock = breakdown.fiveHourBlock
         summary.week = breakdown.week
-        summary.weekDailyCost = breakdown.weekDailyCost
+        summary.weekDailyCostEstimates = breakdown.weekDailyCostEstimates
         summary.weekModels = breakdown.weekModels
         summary.latestSessionTokens = mostRecentSessionTokens(among: files)
         summary.lastActivity = aggregator.lastActivity
@@ -70,23 +81,10 @@ final class ClaudeUsageReader {
         return (latestTokensByFile[newest] ?? [:]).values.reduce(AgentTokens(), +)
     }
 
+    var trackedFileCount: Int { latestTokensByFile.count }
+
     private func modificationDate(_ url: URL) -> Date {
-        (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-    }
-
-    /// Only files touched within the aggregator's retention window can
-    /// contain lines worth aggregating — a file's `mtime` is its *last*
-    /// write, so an older one can't hold anything more recent than that.
-    private func recentSessionFiles(now: Date) -> [URL] {
-        guard let enumerator = FileManager.default.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.contentModificationDateKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
-
-        let cutoff = calendar.date(byAdding: .day, value: -91, to: now) ?? .distantPast
-        return enumerator.compactMap { $0 as? URL }
-            .filter { $0.pathExtension == "jsonl" && modificationDate($0) >= cutoff }
+        (try? URL(fileURLWithPath: url.path).resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
     }
 
     struct UsageEntry {

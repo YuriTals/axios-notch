@@ -155,6 +155,16 @@ final class TerminalSessionStore: ObservableObject {
     private var sessions: [SessionKey: Session] = [:]
     private var autosaveTimer: Timer?
 
+    private let launchProcess: (ActivityTerminalView, Tool, String) -> Void
+
+    /// Tests can launch a shell without reading the user's interactive profile.
+    init(launchProcess: @escaping (ActivityTerminalView, Tool, String) -> Void = { view, tool, directory in
+        let (executable, args) = PTYSession.launchArguments(for: tool)
+        view.startProcess(executable: executable, args: args, currentDirectory: directory)
+    }) {
+        self.launchProcess = launchProcess
+    }
+
     // MARK: Queries (aggregated per tool — used by tiles and the closed notch)
 
     func keys(for tool: Tool) -> [SessionKey] { keys.filter { $0.tool == tool } }
@@ -288,7 +298,7 @@ final class TerminalSessionStore: ObservableObject {
         if key.tool.isShell {
             // A plain shell scrolls: everything after the last Enter is the output.
             guard let marker = session.lastSubmitMarker else { return nil }
-            text = AnswerExtractor.answer(in: buffer, since: marker, dropsPrompt: true, columns: session.columns)
+            text = AnswerExtractor.answer(in: buffer, since: marker.rowOffset(in: session.view.getTerminal()), dropsPrompt: true, columns: session.columns)
         } else {
             // Claude/Codex redraw in place; find their last reply by its structure.
             text = AnswerExtractor.cliAnswer(in: buffer, fixedBox: key.provider == .codex, columns: session.columns)
@@ -392,7 +402,7 @@ final class TerminalSessionStore: ObservableObject {
         var timer: Timer?
         var attentionTimer: Timer?
         /// Buffer line count when the user last pressed Enter (see `AnswerExtractor`).
-        var lastSubmitMarker: Int?
+        var lastSubmitMarker: ShellAnswerMarker?
         var isWaiting = false
         /// Called when the tool starts or stops asking for approval.
         var onAttention: ((Bool) -> Void)?
@@ -519,7 +529,7 @@ final class TerminalSessionStore: ObservableObject {
         let mode: ResponseTracker.Mode
         switch key.tool {
         case .shell: mode = .foreground
-        case .agent(.claude), .antigravity, .custom: mode = .silence
+        case .agent(.claude), .agent(.antigravity), .antigravity, .custom: mode = .silence
         case .agent(.codex): mode = .marker
         }
         let session = Session(key: key, mode: mode)
@@ -528,7 +538,7 @@ final class TerminalSessionStore: ObservableObject {
         session.view.processDelegate = session
         session.view.onSubmit = { [weak session] in
             guard let session else { return }
-            session.lastSubmitMarker = AnswerExtractor.lineCount(of: session.bufferText())
+            session.lastSubmitMarker = ShellAnswerMarker(terminal: session.view.getTerminal())
             session.tracker.userSubmitted(now: Date())
             session.startPolling()
         }
@@ -553,7 +563,7 @@ final class TerminalSessionStore: ObservableObject {
             self.lastPhrase = phrase
             let notice = NotchNotice(tool: key.tool, project: session?.projectName(), phrase: phrase, sessionID: key.id)
             self.lastFinish = notice
-            NoticeSound.playIfEnabled()
+            if !SystemNotifier.shared.isPaused { NoticeSound.playIfEnabled() }
             SystemNotifier.shared.post(notice)
         }
         session.onAttention = { [weak self, weak session] waiting in
@@ -567,7 +577,7 @@ final class TerminalSessionStore: ObservableObject {
                 let notice = NotchNotice(tool: key.tool, project: session?.projectName(), phrase: phrase,
                                          level: .warning, sessionID: key.id)
                 self.lastFinish = notice
-                NoticeSound.playIfEnabled()
+                if !SystemNotifier.shared.isPaused { NoticeSound.playIfEnabled() }
                 SystemNotifier.shared.post(notice)
             } else {
                 self.waitingIDs.remove(key.id)
@@ -577,9 +587,8 @@ final class TerminalSessionStore: ObservableObject {
             guard let self, let session else { return }
             self.remove(key, session: session)
         }
-        let (executable, args) = PTYSession.launchArguments(for: key.tool)
         // Start in the home folder unless told otherwise: a packaged .app inherits "/".
-        session.view.startProcess(executable: executable, args: args, currentDirectory: directory ?? NSHomeDirectory())
+        launchProcess(session.view, key.tool, directory ?? NSHomeDirectory())
         if mode == .marker { session.startPolling() }
         if key.tool.agent != nil { session.startWatchingForApproval() }          // permission prompts are Claude/Codex
         return session

@@ -54,9 +54,9 @@ struct NotchPickerView: View {
                     ToolTile(title: tool.displayName(customTools: settings.customTools), tint: NotchTheme.accent(for: tool), tool: tool, limit: limit(for: tool)) {
                         ToolGlyph(tool: tool, size: 30)
                     } action: {
-                        // Claude and Codex open their usage first (with a terminal button);
+                        // Built-in providers open usage first (with a terminal button);
                         // everything else goes straight to its terminal.
-                        if let provider = tool.agent { controller.showUsage(for: provider) } else { controller.openTerminal(for: tool) }
+                        if let provider = tool.usageProvider { controller.showUsage(for: provider) } else { controller.openTerminal(for: tool) }
                     }
                 }
             }
@@ -78,8 +78,8 @@ struct NotchPickerView: View {
     }
 
     private func limit(for tool: Tool) -> AgentLimit? {
-        guard let provider = tool.agent, case .available(let limits) = usageStore.limits[provider] else { return nil }
-        return limits.fiveHour
+        guard let provider = tool.usageProvider, case .available(let limits) = usageStore.limits[provider] else { return nil }
+        return limits.pickerLimit
     }
 }
 

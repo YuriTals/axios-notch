@@ -83,8 +83,17 @@ struct NotchContentView: View {
         }
     }
 
-    @ViewBuilder
     private var surface: some View {
+        VStack(spacing: 0) {
+            stateSurface
+            if isOpen && BuildChannel.isTest {
+                TestBuildBadge().frame(height: NotchWindowController.testFooterHeight)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var stateSurface: some View {
         switch controller.state {
         case .closed:
             closedView
@@ -93,35 +102,35 @@ struct NotchContentView: View {
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
                 .frame(width: controller.openSize(for: controller.state).width,
-                       height: controller.openSize(for: controller.state).height, alignment: .top)
+                       height: controller.openSize(for: controller.state).height - NotchWindowController.testFooterHeight, alignment: .top)
                 .transition(.opacity)
         case .drop:
             NotchDropView(controller: controller)
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
                 .frame(width: controller.openSize(for: controller.state).width,
-                       height: controller.openSize(for: controller.state).height, alignment: .top)
+                       height: controller.openSize(for: controller.state).height - NotchWindowController.testFooterHeight, alignment: .top)
                 .transition(.opacity)
         case .settings:
             NotchSettingsView(controller: controller, usageStore: usageStore)
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
                 .frame(width: controller.openSize(for: controller.state).width,
-                       height: controller.openSize(for: controller.state).height, alignment: .top)
+                       height: controller.openSize(for: controller.state).height - NotchWindowController.testFooterHeight, alignment: .top)
                 .transition(.opacity)
         case .usage(let provider):
-            NotchUsageView(controller: controller, provider: provider, summary: usageStore.summaries[provider], limits: usageStore.limits[provider] ?? .loading, forecasts: usageStore.forecasts)
+            NotchUsageView(controller: controller, provider: provider, summary: usageStore.summaries[provider], limits: usageStore.limits[provider] ?? .loading, forecasts: usageStore.forecasts, refreshFailure: usageStore.limitFailures[provider])
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
                 .frame(width: controller.openSize(for: controller.state).width,
-                       height: controller.openSize(for: controller.state).height, alignment: .top)
+                       height: controller.openSize(for: controller.state).height - NotchWindowController.testFooterHeight, alignment: .top)
                 .transition(.opacity)
         case .terminal(let tool):
             TerminalPanelView(tool: tool, onClose: { controller.closeTerminal() })
                 .padding(.horizontal, NotchWindowController.openRadii.top)
                 .padding(.top, controller.notchStripSize.height)
                 .frame(width: controller.openSize(for: controller.state).width,
-                       height: controller.openSize(for: controller.state).height, alignment: .top)
+                       height: controller.openSize(for: controller.state).height - NotchWindowController.testFooterHeight, alignment: .top)
                 .transition(.opacity)
         }
     }
@@ -147,7 +156,10 @@ struct NotchContentView: View {
     private var closedCore: some View {
         HStack(spacing: 6) {
             Group {
-                if let axiosMark {
+                if BuildChannel.isTest {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+                        .help("BUILD DE TESTE")
+                } else if let axiosMark {
                     Image(nsImage: axiosMark)
                         .resizable()
                         .scaledToFit()
@@ -156,9 +168,9 @@ struct NotchContentView: View {
                 }
             }
             .frame(width: 14, height: 14)
-            Text("Axios")
+            Text(BuildChannel.isTest ? "TESTE" : "Axios")
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(BuildChannel.isTest ? .yellow : .white.opacity(0.7))
             ClosedToolStatus()
             // Visible without opening the notch: answering, or answers waiting.
             if sessions.anyWaiting {

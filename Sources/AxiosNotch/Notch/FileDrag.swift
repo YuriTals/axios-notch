@@ -18,7 +18,8 @@ enum FileDragRules {
         CGRect(x: notch.midX - triggerHalfWidth, y: notch.maxY - triggerDepth, width: triggerHalfWidth * 2, height: triggerDepth + 20)
     }
 
-    static func action(isFileDrag: Bool, pointer: CGPoint, notch: CGRect, openSurface: CGRect?, isDropOpen: Bool, isIdle: Bool) -> Action {
+    static func action(isFileDrag: Bool, pointer: CGPoint, notch: CGRect, openSurface: CGRect?, isDropOpen: Bool, isIdle: Bool, isPaused: Bool = false) -> Action {
+        guard !isPaused else { return .none }
         guard isFileDrag else { return isDropOpen ? .close : .none }
         if isDropOpen {
             // Already showing the targets: stay while the pointer is on or near them.

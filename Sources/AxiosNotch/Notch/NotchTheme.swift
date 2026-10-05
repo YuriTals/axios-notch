@@ -12,6 +12,7 @@ enum NotchTheme {
         switch provider {
         case .claude: return claudeAccent
         case .codex: return codexAccent
+        case .antigravity: return Color(red: 0.42, green: 0.55, blue: 0.98)
         }
     }
 
@@ -65,6 +66,7 @@ struct ProviderGlyph: View {
         switch provider {
         case .claude: ClaudeMascot().frame(width: size * 1.1, height: size * 0.88)
         case .codex: CodexCloud().frame(width: size, height: size)
+        case .antigravity: AntigravityMark().frame(width: size, height: size)
         }
     }
 }
@@ -89,7 +91,7 @@ struct ToolGlyph: View {
                 .fill(LinearGradient(colors: [color, color.opacity(0.65)], startPoint: .top, endPoint: .bottom))
                 .frame(width: size, height: size)
                 .overlay {
-                    Text(String(name.first.map { Character($0.uppercased()) } ?? "?"))
+                    Text(CustomTool.initial(for: name))
                         .font(.system(size: size * 0.52, weight: .heavy, design: .rounded))
                         .foregroundStyle(.black.opacity(0.78))
                 }

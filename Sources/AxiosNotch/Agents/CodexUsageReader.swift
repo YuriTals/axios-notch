@@ -6,10 +6,10 @@ import Foundation
 /// of the `usage` object varies by event type, so this searches a few levels
 /// deep for a `usage` dictionary instead of assuming one fixed shape.
 final class CodexUsageReader {
-    private let root: URL
     private let calendar: Calendar
     private let tailReader = JSONLTailReader()
     private let aggregator: AgentUsageAggregator
+    private let fileIndex: SessionFileIndex
 
     /// Per-file running token total, used only for "latest session".
     private var latestTokensByFile: [URL: AgentTokens] = [:]
@@ -20,28 +20,46 @@ final class CodexUsageReader {
     /// appears on separate `turn_context`/`world_state` lines — so the model
     /// active for a file has to be remembered the same way as its `cwd`.
     private var lastKnownModelByFile: [URL: String] = [:]
+    private var lastCumulativeByFile: [URL: AgentTokens] = [:]
+    private var seenResponsesByFile: [URL: Set<String>] = [:]
 
     init(root: URL = CodexUsageReader.defaultRoot, calendar: Calendar = .current) {
-        self.root = root
         self.calendar = calendar
         self.aggregator = AgentUsageAggregator(calendar: calendar)
+        self.fileIndex = SessionFileIndex(root: root, calendar: calendar)
     }
 
     static var defaultRoot: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/sessions")
+        AgentDirectories.configuration(for: .codex).appendingPathComponent("sessions", isDirectory: true)
     }
 
     func refresh(now: Date = Date()) -> AgentUsageSummary {
         var summary = AgentUsageSummary(provider: .codex)
-        let files = recentSessionFiles(now: now)
+        let files = fileIndex.files(now: now)
+        let active = Set(files)
+        tailReader.retainFiles(active)
+        latestTokensByFile = latestTokensByFile.filter { active.contains($0.key) }
+        lastKnownProjectByFile = lastKnownProjectByFile.filter { active.contains($0.key) }
+        lastKnownModelByFile = lastKnownModelByFile.filter { active.contains($0.key) }
+        lastCumulativeByFile = lastCumulativeByFile.filter { active.contains($0.key) }
+        seenResponsesByFile = seenResponsesByFile.filter { active.contains($0.key) }
+        aggregator.retainSources(active)
         summary.hasAnySession = !files.isEmpty
 
         for file in files {
-            guard let lines = tailReader.newLines(in: file) else { continue }
+            guard let read = tailReader.read(in: file) else { continue }
+            if read.wasReset {
+                latestTokensByFile[file] = nil
+                lastKnownProjectByFile[file] = nil
+                lastKnownModelByFile[file] = nil
+                lastCumulativeByFile[file] = nil
+                seenResponsesByFile[file] = nil
+                aggregator.removeEvents(from: file)
+            }
             var sessionTokens = latestTokensByFile[file] ?? AgentTokens()
             let fileDay = dayFromPath(file)
 
-            for line in lines {
+            for line in read.lines {
                 guard let object = try? JSONSerialization.jsonObject(with: line) else { continue }
 
                 if let cwd = Self.findValue(forKey: "cwd", in: object) {
@@ -52,13 +70,25 @@ final class CodexUsageReader {
                 }
 
                 guard let entry = Self.parseUsage(object) else { continue }
-                sessionTokens += entry.tokens
-                let date = fileDay ?? now
+                if let id = entry.id, !seenResponsesByFile[file, default: []].insert(id).inserted { continue }
+                let tokens: AgentTokens
+                if let cumulative = entry.cumulative {
+                    let previous = lastCumulativeByFile[file] ?? AgentTokens()
+                    tokens = cumulative.totalTokens < previous.totalTokens
+                        ? entry.tokens : cumulative.subtracting(previous)
+                    lastCumulativeByFile[file] = cumulative
+                } else {
+                    tokens = entry.tokens
+                    lastCumulativeByFile[file, default: AgentTokens()] += tokens
+                }
+                guard tokens.totalTokens > 0 else { continue }
+                sessionTokens += tokens
+                let date = entry.timestamp ?? fileDay ?? now
                 aggregator.ingest(AgentUsageEvent(
                     date: date,
                     model: entry.model ?? lastKnownModelByFile[file],
                     project: lastKnownProjectByFile[file],
-                    tokens: entry.tokens
+                    tokens: tokens, id: entry.id.map { file.path + ":" + $0 }, source: file
                 ))
             }
             latestTokensByFile[file] = sessionTokens
@@ -66,17 +96,17 @@ final class CodexUsageReader {
 
         let breakdown = aggregator.snapshot(now: now)
         summary.todayTokens = breakdown.todayTokens
-        summary.estimatedCostToday = breakdown.estimatedCostToday
-        summary.hourlySpendToday = breakdown.hourlySpendToday
+        summary.todayCostEstimate = breakdown.todayCostEstimate
+        summary.hourlyCostEstimatesToday = breakdown.hourlyCostEstimatesToday
         summary.modelSpendToday = breakdown.modelSpendToday
         summary.projectSpendToday = breakdown.projectSpendToday
         summary.dailyHistory = breakdown.dailyHistory
-        summary.totalCostInHistory = breakdown.totalCostInHistory
+        summary.historyCostEstimate = breakdown.historyCostEstimate
         summary.activeDaysInHistory = breakdown.activeDaysInHistory
         summary.busiestDay = breakdown.busiestDay
         summary.fiveHourBlock = breakdown.fiveHourBlock
         summary.week = breakdown.week
-        summary.weekDailyCost = breakdown.weekDailyCost
+        summary.weekDailyCostEstimates = breakdown.weekDailyCostEstimates
         summary.weekModels = breakdown.weekModels
         summary.latestSessionTokens = mostRecentSessionTokens(among: files)
         summary.lastActivity = aggregator.lastActivity
@@ -90,25 +120,15 @@ final class CodexUsageReader {
         return latestTokensByFile[newest] ?? AgentTokens()
     }
 
+    var trackedFileCount: Int { latestTokensByFile.count }
+
     private func modificationDate(_ url: URL) -> Date {
-        (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+        (try? URL(fileURLWithPath: url.path).resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
     }
 
-    private func recentSessionFiles(now: Date) -> [URL] {
-        guard let enumerator = FileManager.default.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.contentModificationDateKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
 
-        let cutoff = calendar.date(byAdding: .day, value: -91, to: now) ?? .distantPast
-        return enumerator.compactMap { $0 as? URL }
-            .filter { $0.pathExtension == "jsonl" && modificationDate($0) >= cutoff }
-    }
-
-    /// Codex lays sessions out as `.../sessions/<year>/<month>/<day>/rollout-*.jsonl`,
-    /// which is a more reliable source of the session's date than any single
-    /// line inside it.
+    /// Fallback for older logs without a valid event timestamp. The folder
+    /// describes session creation, not when a resumed session produces usage.
     private func dayFromPath(_ file: URL) -> Date? {
         let components = file.deletingLastPathComponent().pathComponents.suffix(3)
         guard components.count == 3,
@@ -127,23 +147,42 @@ final class CodexUsageReader {
     struct UsageEntry {
         let tokens: AgentTokens
         let model: String?
+        let timestamp: Date?
+        var cumulative: AgentTokens? = nil
+        var id: String? = nil
     }
 
     /// Recursively looks for a `"usage"` object carrying token counts,
     /// tolerant of whatever event/payload nesting the line uses, plus a
     /// nearby `"model"` string if one is present.
     static func parseUsage(_ object: Any) -> UsageEntry? {
-        guard let usage = findUsageDictionary(in: object, depth: 0) else { return nil }
+        let root = object as? [String: Any]
+        let payload = root?["payload"] as? [String: Any] ?? root
+        let info = payload?["info"] as? [String: Any]
+        let total = info?["total_token_usage"] as? [String: Any]
+        let last = info?["last_token_usage"] as? [String: Any]
+        let usage = last ?? total ?? findUsageDictionary(in: object, depth: 0)
+        guard let usage else { return nil }
 
-        let tokens = AgentTokens(
-            input: usage["input_tokens"] as? Int ?? 0,
-            cacheWrite: usage["cache_write_input_tokens"] as? Int ?? 0,
-            cacheRead: usage["cached_input_tokens"] as? Int ?? 0,
-            output: usage["output_tokens"] as? Int ?? 0,
-            reasoning: usage["reasoning_output_tokens"] as? Int ?? 0
-        )
+        let tokens = tokens(from: usage)
         let model = findValue(forKey: "model", in: object)
-        return UsageEntry(tokens: tokens, model: model)
+        let timestamp = ((object as? [String: Any])?["timestamp"] as? String)
+            .flatMap(ClaudeUsageReader.parseTimestamp)
+        let cumulative = total ?? (payload?["thread_token_usage"] as? [String: Any])
+        return UsageEntry(tokens: tokens, model: model, timestamp: timestamp,
+                          cumulative: cumulative.map { Self.tokens(from: $0) },
+                          id: findValue(forKey: "response_id", in: object))
+    }
+
+    /// Codex reports cache buckets inside input, and reasoning inside output.
+    private static func tokens(from usage: [String: Any]) -> AgentTokens {
+        let input = max(0, usage["input_tokens"] as? Int ?? 0)
+        let read = min(input, max(0, usage["cached_input_tokens"] as? Int ?? 0))
+        let write = min(input - read, max(0, usage["cache_write_input_tokens"] as? Int ?? 0))
+        let output = max(0, usage["output_tokens"] as? Int ?? 0)
+        return AgentTokens(input: input - read - write, cacheWrite: write,
+                           cacheRead: read, output: output,
+                           reasoning: min(output, max(0, usage["reasoning_output_tokens"] as? Int ?? 0)))
     }
 
     static func parseUsage(_ line: Data) -> UsageEntry? {

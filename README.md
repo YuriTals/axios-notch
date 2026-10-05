@@ -27,7 +27,7 @@
 ## Highlights
 
 - **Active tools:** Claude, Codex, Antigravity, up to two tools of your own and a Terminal, one click away.
-- **Plan usage:** % of the 5-hour and weekly windows for Claude and Codex, with a forecast and alerts at 80% and 90%.
+- **Plan usage:** click Claude, Codex or Antigravity to see that CLI's 5-hour and weekly usage. Antigravity shows its account's highest quota utilization and local token/cache totals; forecasts and alerts at 80% and 90% remain available for Claude and Codex.
 - **Persistent terminals** inside the notch: copy the last answer, and paste or drag images, files and folders.
 - **Notices:** answer ready and approval requests, with an optional macOS notification.
 - **Multiple monitors, themes, bundled Nerd Fonts**, English and Portuguese, and an optional Liquid Glass look (macOS 26+).

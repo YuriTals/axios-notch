@@ -12,6 +12,11 @@ struct CustomTool: Codable, Identifiable, Equatable {
     static let maxCount = 2
     static let maxNameLength = 14
 
+    /// Uppercasing one grapheme can produce several (ß → SS).
+    static func initial(for name: String) -> String {
+        name.first.map { String($0).uppercased() } ?? "?"
+    }
+
     /// What a fresh install starts with: nothing extra.
     static let defaults: [CustomTool] = []
 
@@ -76,7 +81,7 @@ enum Tool: Hashable {
     case shell
     /// Claude or Codex: the agents with usage limits, approval prompts and answer copying.
     case agent(AgentProvider)
-    /// Google's Antigravity CLI (`agy`), built in next to them (no usage data yet).
+    /// Google's Antigravity CLI (`agy`), with usage but no screen parsing.
     case antigravity
     case custom(String)
 
@@ -110,6 +115,8 @@ enum Tool: Hashable {
         return nil
     }
 
+    var usageProvider: AgentProvider? { self == .antigravity ? .antigravity : agent }
+
     var isShell: Bool { self == .shell }
     var isCustom: Bool { if case .custom = self { return true } else { return false } }
     /// A terminal program whose screen layout we do not read: no answer copying, no approval
@@ -128,6 +135,6 @@ enum Tool: Hashable {
 
     /// The tools shown in the picker and the drop strip, in order.
     static func all(customTools: [CustomTool] = AppSettings.shared.customTools) -> [Tool] {
-        AgentProvider.allCases.map(Tool.agent) + [.antigravity] + customTools.map { .custom($0.id) } + [.shell]
+        AgentProvider.allCases.map(\.tool) + customTools.map { .custom($0.id) } + [.shell]
     }
 }

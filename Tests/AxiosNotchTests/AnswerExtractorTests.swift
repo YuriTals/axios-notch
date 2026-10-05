@@ -32,23 +32,23 @@ final class AnswerExtractorTests: XCTestCase {
 
     /// End to end with a real shell: type a command, wait, and read back its output.
     func testCopiesTheRealOutputOfACommandInARealShell() throws {
-        let store = TerminalSessionStore()
+        let store = ShellIntegrationSupport.store()
         defer { for key in store.keys { store.close(key) } }
         let key = store.ensureSelected(.shell)
         let view = try XCTUnwrap(store.view(for: key))
         XCTAssertNil(store.lastAnswer(for: key))                          // nothing submitted yet
 
-        let ready = expectation(description: "shell prompt")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { ready.fulfill() }
-        wait(for: [ready], timeout: 4)
+        try ShellIntegrationSupport.waitForPrompt(in: [view])
 
         view.send(txt: "echo AXN_UNIQUE_ONE; echo AXN_UNIQUE_TWO\r")
-        let done = expectation(description: "command output")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { done.fulfill() }
-        wait(for: [done], timeout: 5)
+        try ShellIntegrationSupport.wait("command output and next prompt", timeout: 5) {
+            Array(ShellIntegrationSupport.lines(in: view).suffix(3)) == [
+                "AXN_UNIQUE_ONE", "AXN_UNIQUE_TWO", ShellIntegrationSupport.prompt
+            ]
+        }
 
         let answer = try XCTUnwrap(store.lastAnswer(for: key), "no answer captured")
-        XCTAssertTrue(answer.contains("AXN_UNIQUE_ONE\nAXN_UNIQUE_TWO"), answer)
+        XCTAssertEqual(answer, "AXN_UNIQUE_ONE\nAXN_UNIQUE_TWO")
         XCTAssertFalse(answer.contains("echo AXN_UNIQUE"), "the typed command must not be part of the answer: \(answer)")
         XCTAssertTrue(store.hasAnswer(for: key))
     }

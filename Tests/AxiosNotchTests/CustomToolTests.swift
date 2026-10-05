@@ -3,6 +3,14 @@ import SwiftUI
 @testable import AxiosNotch
 
 final class CustomToolTests: XCTestCase {
+    func testUnicodeInitialCanExpandWithoutCrashing() {
+        XCTAssertEqual(CustomTool.initial(for: "ßTool"), "SS")
+        XCTAssertEqual(CustomTool.initial(for: "ﬀTool"), "FF")
+        XCTAssertEqual(CustomTool.initial(for: "🧑‍💻Tool"), "🧑‍💻")
+        XCTAssertEqual(CustomTool.initial(for: "aider"), "A")
+        XCTAssertEqual(CustomTool.initial(for: ""), "?")
+    }
+
     private func makeSettings() -> (AppSettings, UserDefaults, String) {
         let suite = "axios-tools-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -77,6 +85,27 @@ final class CustomToolTests: XCTestCase {
 
         defaults.set(Data("junk".utf8), forKey: "customTools")
         XCTAssertTrue(AppSettings(defaults: defaults).customTools.isEmpty, "corrupt data must not break launch")
+    }
+
+    func testRemovalKeepsToolsAccessibleUntilAllTheirTabsAreClosed() throws {
+        let (settings, defaults, suite) = makeSettings()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        settings.addCustomTool(name: "Test", command: "echo test")
+        let tool = try XCTUnwrap(settings.customTools.first)
+        let sessions = TerminalSessionStore()
+        defer { for key in sessions.keys { sessions.close(key) } }
+        let first = sessions.openSession(.custom(tool.id), directory: nil)
+        let second = sessions.openSession(.custom(tool.id), directory: nil)
+        XCTAssertFalse(settings.removeCustomTool(id: tool.id, sessions: sessions))
+        XCTAssertNotNil(settings.customToolRemovalError)
+        XCTAssertTrue(Tool.all(customTools: settings.customTools).contains(.custom(tool.id)))
+        XCTAssertEqual(sessions.keys(for: .custom(tool.id)).count, 2)
+        sessions.close(first)
+        XCTAssertFalse(settings.removeCustomTool(id: tool.id, sessions: sessions))
+        sessions.close(second)
+        XCTAssertTrue(settings.removeCustomTool(id: tool.id, sessions: sessions))
+        XCTAssertNil(settings.customToolRemovalError)
+        XCTAssertTrue(settings.customTools.isEmpty)
     }
 
     func testAFreshInstallShowsClaudeCodexAntigravityAndTerminal() {

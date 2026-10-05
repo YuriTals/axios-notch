@@ -8,6 +8,7 @@ final class SystemNotifier: NSObject, UNUserNotificationCenterDelegate {
     static let shared = SystemNotifier()
 
     /// Called with the session id when the user clicks a notification.
+    var isPaused = false
     var onOpen: ((String) -> Void)?
 
     /// `UNUserNotificationCenter` crashes outside an app bundle (`swift run`).
@@ -55,7 +56,7 @@ final class SystemNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func post(_ notice: NotchNotice, settings: AppSettings = .shared) {
-        guard settings.systemNotification, let center else { return }
+        guard !isPaused, settings.systemNotification, let center else { return }
         let text = Self.content(for: notice, customTools: settings.customTools)
         let content = UNMutableNotificationContent()
         content.title = text.title
@@ -68,7 +69,7 @@ final class SystemNotifier: NSObject, UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         if let id = response.notification.request.content.userInfo["sessionID"] as? String {
-            DispatchQueue.main.async { self.onOpen?(id) }
+            DispatchQueue.main.async { if !self.isPaused { self.onOpen?(id) } }
         }
         completionHandler()
     }
@@ -76,6 +77,6 @@ final class SystemNotifier: NSObject, UNUserNotificationCenterDelegate {
     /// Show it even when Axios Notch is the active app.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.banner])
+        completionHandler(isPaused ? [] : [.banner])
     }
 }

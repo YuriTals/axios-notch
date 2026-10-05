@@ -30,6 +30,7 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
 /// Owns the notch panel and drives it through its three states. Sizing and
 /// positioning are handled here; `NotchContentView` only reacts to `state`.
 final class NotchWindowController: NSObject, ObservableObject {
+    @Published private(set) var isPaused = false
     @Published private(set) var state: NotchState = .closed
     /// Set for a few seconds when an answer finishes while the notch is
     /// closed; the closed notch grows downward to announce it.
@@ -106,14 +107,19 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// this size from the first frame and merely revealed by the growing
     /// surface; letting content follow the animated frame made tiles squeeze
     /// and the terminal reflow (and resize its PTY) on every frame.
+    static var testFooterHeight: CGFloat { BuildChannel.isTest ? 24 : 0 }
+
     func openSize(for state: NotchState) -> CGSize {
+        var size: CGSize
         switch state {
         case .closed: return surfaceSize
-        case .picker, .drop: return CGSize(width: pickerSize.width, height: closedSize.height + pickerSize.height)
-        case .usage: return CGSize(width: usageSize.width, height: closedSize.height + usageSize.height)
-        case .settings: return CGSize(width: settingsSize.width, height: closedSize.height + settingsSize.height)
-        case .terminal: return terminalSize
+        case .picker, .drop: size = CGSize(width: pickerSize.width, height: closedSize.height + pickerSize.height)
+        case .usage(let provider): size = CGSize(width: usageSize.width, height: closedSize.height + usageSize.height + (provider == .antigravity ? 30 : 0))
+        case .settings: size = CGSize(width: settingsSize.width, height: closedSize.height + settingsSize.height)
+        case .terminal: size = terminalSize
         }
+        size.height += Self.testFooterHeight
+        return size
     }
 
     /// Fixed and large enough for the biggest state plus its shadow. The
@@ -122,7 +128,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// hop). Instead the window ignores the mouse everywhere except over the
     /// surface, so its transparent area never swallows clicks.
     private var windowSize: CGSize {
-        CGSize(width: terminalSize.width + shadowInset.width * 2, height: terminalSize.height + shadowInset.height)
+        CGSize(width: terminalSize.width + shadowInset.width * 2, height: terminalSize.height + shadowInset.height + Self.testFooterHeight)
     }
 
     private var localMouseMonitor: Any?
@@ -148,7 +154,7 @@ final class NotchWindowController: NSObject, ObservableObject {
         alertObserver = usageStore.alerts
             .receive(on: DispatchQueue.main)
             .sink { [weak self] alert in
-                self?.announce(NotchNotice(tool: .agent(alert.provider), project: nil, phrase: alert.message,
+                self?.announce(NotchNotice(tool: alert.provider.tool, project: nil, phrase: alert.message,
                                            level: alert.severity, action: .openUsage))
             }
 
@@ -230,6 +236,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// haptic tap (Force Touch trackpads only) — just enough to say
     /// "there's something here", without committing to opening it.
     func setHovering(_ isInside: Bool) {
+        guard !isPaused else { return }
         guard isHovering != isInside else { return }
         isHovering = isInside
         if isInside, AppSettings.shared.hoverHaptic { playHoverHaptic() }
@@ -241,12 +248,14 @@ final class NotchWindowController: NSObject, ObservableObject {
         let performer = NSHapticFeedbackManager.defaultPerformer
         for i in 0..<AppSettings.shared.hapticStrength.rawValue {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.03) {
+                guard !self.isPaused else { return }
                 performer.perform(.levelChange, performanceTime: .now)
             }
         }
     }
 
     func toggleExpanded() {
+        guard !isPaused else { return }
         switch state {
         case .closed: setState(.picker)
         default: collapse()
@@ -261,15 +270,28 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// Hides the panel entirely — used by the menu bar item's Pause action.
     /// Collapses first so resuming always starts from the closed capsule.
     func pause() {
+        isPaused = true
+        SystemNotifier.shared.isPaused = true
+        bannerDismiss?.cancel()
+        banner = nil
+        dragIsFiles = false
+        draggedFolders = []
+        dragCheckedChange = -1
+        isHovering = false
         setState(.closed)
+        panel.ignoresMouseEvents = true
         panel.orderOut(nil)
     }
 
     func resume() {
+        isPaused = false
+        SystemNotifier.shared.isPaused = false
+        updateMousePassthrough()
         panel.orderFrontRegardless()
     }
 
     func showSettings() {
+        guard !isPaused else { return }
         panel.orderFrontRegardless()
         setState(.settings)
     }
@@ -277,13 +299,14 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// Clicking a banner: an answer opens its terminal, a limit warning opens
     /// that tool's usage.
     func activate(_ notice: NotchNotice) {
+        guard !isPaused else { return }
         switch notice.action {
         case .openTerminal:
             // Land on the exact tab that answered.
             if let id = notice.sessionID { TerminalSessionStore.shared.select(id: id) }
             openTerminal(for: notice.tool)
         case .openUsage:
-            if let provider = notice.tool.agent { showUsage(for: provider) } else { showPicker() }
+            if let provider = notice.tool.usageProvider { showUsage(for: provider) } else { showPicker() }
         }
     }
 
@@ -297,6 +320,7 @@ final class NotchWindowController: NSObject, ObservableObject {
 
     /// Called on every drag movement anywhere on screen.
     private func handleFileDrag() {
+        guard !isPaused else { return }
         let drag = NSPasteboard(name: .drag)
         // Reading the pasteboard on every movement is wasteful; do it once per drag.
         if drag.changeCount != dragCheckedChange {
@@ -308,7 +332,7 @@ final class NotchWindowController: NSObject, ObservableObject {
         let action = FileDragRules.action(
             isFileDrag: dragIsFiles, pointer: NSEvent.mouseLocation, notch: geometry.frame,
             openSurface: state == .drop ? surfaceRect(slack: 0) : nil,
-            isDropOpen: state == .drop, isIdle: state == .closed)
+            isDropOpen: state == .drop, isIdle: state == .closed, isPaused: isPaused)
         switch action {
         case .open:
             panel.orderFrontRegardless()
@@ -334,7 +358,7 @@ final class NotchWindowController: NSObject, ObservableObject {
 
     /// Files were dropped on a tool: open its chat and add them.
     func attach(_ urls: [URL], to tool: Tool) {
-        guard !urls.isEmpty else { return }
+        guard !isPaused, !urls.isEmpty else { return }
         // Folders are not "attached": they are where a new session should start.
         if FileDrag.areAllFolders(urls) {
             for folder in urls.prefix(SessionKey.maxPerProvider) {
@@ -358,6 +382,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// Opens the terminal of a tool: Claude, Codex, a registered command, or a
     /// clean shell.
     func openTerminal(for tool: Tool) {
+        guard !isPaused else { return }
         // Make sure the tool has a tab to show (the first one is created here,
         // never from inside the view).
         TerminalSessionStore.shared.ensureSelected(tool)
@@ -372,6 +397,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// Shows the "answer ready" banner for a few seconds, only while closed —
     /// an open panel already has the user's attention.
     private func announce(_ notice: NotchNotice) {
+        guard !isPaused else { return }
         // Limit warnings are always on; only the "answer ready" banner can be turned off.
         let enabled = notice.action == .openUsage || AppSettings.shared.finishBanner
         guard state == .closed, enabled else { return }
@@ -387,7 +413,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     }
 
     private func setState(_ newState: NotchState) {
-        guard newState != state else { return }
+        guard (!isPaused || newState == .closed), newState != state else { return }
         if newState != .closed {
             bannerDismiss?.cancel()
             banner = nil
@@ -405,6 +431,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// close", but if the pointer jumped onto the surface without a move event
     /// (so the window was still ignoring the mouse) treat it as a click on it.
     private func handleClickOutsideWindow() {
+        guard !isPaused else { return }
         if surfaceArea.contains(NSEvent.mouseLocation) {
             updateMousePassthrough()
             if state == .closed { toggleExpanded() }
@@ -439,6 +466,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     /// The window takes mouse events only while the pointer is over the
     /// surface (with a few points of slack for the hover growth and shadow).
     private func updateMousePassthrough() {
+        guard !isPaused else { panel.ignoresMouseEvents = true; return }
         let mouse = NSEvent.mouseLocation
         followPointer(to: mouse)
         let inside = surfaceArea.contains(mouse)

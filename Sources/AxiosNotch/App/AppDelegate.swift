@@ -40,7 +40,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setUpStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = item.button {
-            if let url = AppResources.url(forResource: "AxiosMark", withExtension: "png"),
+            if BuildChannel.isTest, let url = AppResources.url(forResource: "AppIcon", withExtension: "icns"),
+               let image = NSImage(contentsOf: url) {
+                image.size = NSSize(width: 18, height: 18)
+                image.isTemplate = false
+                button.image = image
+                button.toolTip = "Axios Notch — BUILD DE TESTE"
+            } else if let url = AppResources.url(forResource: "AxiosMark", withExtension: "png"),
                let image = NSImage(contentsOf: url) {
                 image.isTemplate = true
                 image.size = NSSize(width: 16, height: 16)
@@ -51,6 +57,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
+        if BuildChannel.isTest {
+            let label = NSMenuItem(title: "⚠ BUILD DE TESTE — Homologação", action: nil, keyEquivalent: "")
+            label.isEnabled = false
+            menu.addItem(label)
+            menu.addItem(.separator())
+        }
 
         let settingsItem = NSMenuItem(title: tr("Ajustes…", "Settings…"), action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
@@ -99,11 +111,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
-        if isPaused { togglePause() }
+        // Paused means the panel stays hidden until the user chooses Resume.
+        guard !isPaused else { return }
         notchController?.showSettings()
     }
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+}
+
+extension AppDelegate: NSMenuItemValidation {
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        menuItem !== settingsMenuItem || !isPaused
     }
 }

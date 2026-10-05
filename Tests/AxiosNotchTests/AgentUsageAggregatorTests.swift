@@ -20,8 +20,8 @@ final class AgentUsageAggregatorTests: XCTestCase {
 
         let breakdown = aggregator.snapshot(now: now)
 
-        XCTAssertEqual(breakdown.hourlySpendToday[9], 3, accuracy: 0.001)
-        XCTAssertEqual(breakdown.hourlySpendToday[21], 15, accuracy: 0.001)
+        XCTAssertEqual(breakdown.hourlySpendToday[9] ?? -1, 3, accuracy: 0.001)
+        XCTAssertEqual(breakdown.hourlySpendToday[21] ?? -1, 15, accuracy: 0.001)
         XCTAssertEqual(breakdown.modelSpendToday.map(\.name), ["claude-opus-4", "claude-sonnet-4"])
         XCTAssertEqual(Set(breakdown.projectSpendToday.map(\.name)), ["axios-notch", "obsidian-sync"])
         XCTAssertEqual(breakdown.estimatedCostToday ?? 0, 18, accuracy: 0.001)

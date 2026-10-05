@@ -28,11 +28,13 @@ final class UpdateStore: ObservableObject {
     private let defaults: UserDefaults
     private let fetch: () async throws -> Data
     private let currentVersionText: String
+    private let internalBuild: Bool
     private var timer: Timer?
 
     init(defaults: UserDefaults = .standard,
          currentVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0",
-         fetch: (() async throws -> Data)? = nil) {
+         fetch: (() async throws -> Data)? = nil, internalBuild: Bool = BuildChannel.isTest) {
+        self.internalBuild = internalBuild
         self.defaults = defaults
         self.currentVersionText = currentVersion
         self.fetch = fetch ?? {
@@ -53,7 +55,7 @@ final class UpdateStore: ObservableObject {
     var currentVersion: String { currentVersionText }
 
     /// Only a real .app can replace itself; `swift run` can look but not install.
-    var canInstall: Bool { Bundle.main.bundleURL.pathExtension == "app" }
+    var canInstall: Bool { !internalBuild && Bundle.main.bundleURL.pathExtension == "app" }
 
     var availableRelease: ReleaseInfo? {
         if case .available(let release) = state { return release }
@@ -62,7 +64,7 @@ final class UpdateStore: ObservableObject {
 
     /// Checks shortly after launch and then every few hours, if the user allows it.
     func start() {
-        guard timer == nil else { return }
+        guard !internalBuild, timer == nil else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in self?.checkIfDue() }
         timer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.checkIfDue() }
@@ -70,12 +72,13 @@ final class UpdateStore: ObservableObject {
     }
 
     func checkIfDue(now: Date = Date()) {
-        guard automaticChecks, availableRelease == nil else { return }
+        guard !internalBuild, automaticChecks, availableRelease == nil else { return }
         if let lastCheck, now.timeIntervalSince(lastCheck) < checkInterval { return }
         Task { await check() }
     }
 
     func check() async {
+        guard !internalBuild else { return }
         switch state {
         case .checking, .downloading, .installing: return
         default: break
@@ -101,7 +104,7 @@ final class UpdateStore: ObservableObject {
 
     /// Downloads, verifies and swaps the app, then quits so the swap script can run.
     func install() async {
-        guard case .available(let release) = state else { return }
+        guard !internalBuild, case .available(let release) = state else { return }
         state = .downloading
         do {
             let (script, _) = try await UpdateInstaller.prepare(release) { [weak self] in

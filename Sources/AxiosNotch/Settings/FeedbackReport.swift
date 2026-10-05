@@ -93,7 +93,7 @@ enum FeedbackReport {
                 ("vibração", settings.hoverHaptic ? String(describing: settings.hapticStrength) : "não"),
             ],
             tools: ["claude", "codex", "agy"].map { ($0, isInstalled($0) ? "instalado" : "não encontrado") },
-            usage: [("Claude", state(.claude)), ("Codex", state(.codex))],
+            usage: AgentProvider.allCases.map { ($0.displayName, state($0)) },
             openTabs: sessions.keys.count,
             customToolCount: settings.customTools.count
         )

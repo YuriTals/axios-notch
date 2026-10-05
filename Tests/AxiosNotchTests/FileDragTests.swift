@@ -3,6 +3,13 @@ import AppKit
 @testable import AxiosNotch
 
 final class FileDragTests: XCTestCase {
+    func testPausedDragNeverReopensThePanel() {
+        let notch = CGRect(x: 300, y: 800, width: 200, height: 30)
+        XCTAssertEqual(FileDragRules.action(isFileDrag: true, pointer: CGPoint(x: 400, y: 820),
+            notch: notch, openSurface: nil, isDropOpen: false, isIdle: true, isPaused: true), .none)
+        XCTAssertEqual(FileDragRules.action(isFileDrag: true, pointer: CGPoint(x: 400, y: 820),
+            notch: notch, openSurface: nil, isDropOpen: false, isIdle: true, isPaused: false), .open)
+    }
     // A notch at the top-centre of a 2056-wide screen (AppKit: y grows upward).
     private let notch = CGRect(x: 928, y: 1248, width: 200, height: 32)
     private let surface = CGRect(x: 858, y: 1130, width: 340, height: 150)
@@ -67,15 +74,14 @@ final class FileDragTests: XCTestCase {
     }
 
     func testAttachingToAShellPastesTheEscapedPathOnceItIsReady() throws {
-        let store = TerminalSessionStore()
+        let store = ShellIntegrationSupport.store()
         defer { for key in store.keys { store.close(key) } }
         store.attach(paths: ["/tmp/uma foto.png"], to: .shell)                          // creates the tab, waits, pastes
         let key = try XCTUnwrap(store.selectedKey(for: .shell))
         let view = try XCTUnwrap(store.view(for: key))
-        let settle = expectation(description: "pasted"); DispatchQueue.main.asyncAfter(deadline: .now() + 3) { settle.fulfill() }
-        wait(for: [settle], timeout: 6)
-        let screen = String(data: view.getTerminal().getBufferAsData(), encoding: .utf8) ?? ""
-        XCTAssertTrue(screen.contains("/tmp/uma\\ foto.png"), screen)
+        try ShellIntegrationSupport.wait("escaped path pasted", timeout: 8) {
+            ShellIntegrationSupport.lines(in: view).joined(separator: "\n").contains("/tmp/uma\\ foto.png")
+        }
     }
 }
 

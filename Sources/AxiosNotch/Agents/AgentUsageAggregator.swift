@@ -19,6 +19,25 @@ final class AgentUsageAggregator {
 
     private var indexByID: [String: Int] = [:]
 
+    func removeEvents(from source: URL) {
+        events.removeAll { $0.source == source }
+        rebuildIndex()
+    }
+
+    func retainSources(_ sources: Set<URL>) {
+        let count = events.count
+        events.removeAll { event in event.source.map { !sources.contains($0) } ?? false }
+        if events.count != count { rebuildIndex() }
+    }
+
+    private func rebuildIndex() {
+        indexByID = [:]
+        for (index, event) in events.enumerated() {
+            if let id = event.id { indexByID[id] = index }
+        }
+        lastActivity = events.map(\.date).max()
+    }
+
     func ingest(_ event: AgentUsageEvent) {
         if let id = event.id {
             if let index = indexByID[id], index < events.count, events[index].id == id {
@@ -41,25 +60,26 @@ final class AgentUsageAggregator {
         guard let cutoff = calendar.date(byAdding: .day, value: -historyWindowDays, to: now) else { return }
         guard events.contains(where: { $0.date < cutoff }) else { return }
         events.removeAll { $0.date < cutoff }
-        indexByID = [:]
-        for (index, event) in events.enumerated() {
-            if let id = event.id { indexByID[id] = index }
-        }
+        rebuildIndex()
     }
 
     struct Breakdown {
         var todayTokens = AgentTokens()
-        var estimatedCostToday: Double?
-        var hourlySpendToday: [Double] = Array(repeating: 0, count: 24)
+        var todayCostEstimate = AgentCostEstimate()
+        var estimatedCostToday: Double? { todayCostEstimate.amount }
+        var hourlyCostEstimatesToday = Array(repeating: AgentCostEstimate(), count: 24)
+        var hourlySpendToday: [Double?] { hourlyCostEstimatesToday.map(\.amount) }
         var modelSpendToday: [AgentNamedSpend] = []
         var projectSpendToday: [AgentNamedSpend] = []
         var dailyHistory: [AgentDailyActivity] = []
-        var totalCostInHistory: Double = 0
+        var historyCostEstimate = AgentCostEstimate()
+        var totalCostInHistory: Double? { historyCostEstimate.amount }
         var activeDaysInHistory: Int = 0
         var busiestDay: AgentDailyActivity?
         var fiveHourBlock: AgentUsageWindow?
         var week = AgentUsageWindow()
-        var weekDailyCost: [Double] = Array(repeating: 0, count: 7)
+        var weekDailyCostEstimates = Array(repeating: AgentCostEstimate(), count: 7)
+        var weekDailyCost: [Double?] { weekDailyCostEstimates.map(\.amount) }
         var weekModels: [AgentModelUsage] = []
     }
 
@@ -68,27 +88,28 @@ final class AgentUsageAggregator {
     func snapshot(now: Date) -> Breakdown {
         prune(now: now)
 
-        var dailyCost: [DayKey: Double] = [:]
-        var hourlyToday = Array(repeating: 0.0, count: 24)
-        var modelToday: [String: Double] = [:]
-        var projectToday: [String: Double] = [:]
+        var dailyCost: [DayKey: AgentCostEstimate] = [:]
+        var hourlyToday = Array(repeating: AgentCostEstimate(), count: 24)
+        var modelToday: [String: AgentCostEstimate] = [:]
+        var projectToday: [String: AgentCostEstimate] = [:]
         var todayTokens = AgentTokens()
         let todayKey = DayKey(date: now, calendar: calendar)
 
         for event in events {
-            let cost = event.model.flatMap { AgentPricing.estimatedCost(model: $0, tokens: event.tokens) } ?? 0
+            let cost = cost(of: event)
+            let tokens = event.tokens.totalTokens
             let key = DayKey(date: event.date, calendar: calendar)
-            dailyCost[key, default: 0] += cost
+            dailyCost[key, default: AgentCostEstimate()].add(cost, tokens: tokens)
 
             guard key == todayKey else { continue }
             todayTokens += event.tokens
             let hour = calendar.component(.hour, from: event.date)
-            hourlyToday[hour] += cost
+            hourlyToday[hour].add(cost, tokens: tokens)
             if let model = event.model {
-                modelToday[model, default: 0] += cost
+                modelToday[model, default: AgentCostEstimate()].add(cost, tokens: tokens)
             }
             if let project = event.project {
-                projectToday[project, default: 0] += cost
+                projectToday[project, default: AgentCostEstimate()].add(cost, tokens: tokens)
             }
         }
 
@@ -96,47 +117,54 @@ final class AgentUsageAggregator {
         var week = AgentUsageWindow()
         for event in events where event.date >= weekStart && event.date <= now {
             week.tokens += event.tokens
-            week.cost += cost(of: event)
+            week.costEstimate.add(cost(of: event), tokens: event.tokens.totalTokens)
         }
         var byModel: [String: AgentModelUsage] = [:]
         for event in events where event.date >= weekStart && event.date <= now {
             guard let model = event.model, !model.hasPrefix("<") else { continue }   // skip "<synthetic>"
-            var entry = byModel[model] ?? AgentModelUsage(name: model, tokens: 0, cost: 0)
+            var entry = byModel[model] ?? AgentModelUsage(name: model, tokens: 0)
             entry.tokens += event.tokens.totalTokens
-            entry.cost += cost(of: event)
+            entry.costEstimate.add(cost(of: event), tokens: event.tokens.totalTokens)
             byModel[model] = entry
         }
-        // Rank by spend when pricing is known, else by tokens.
-        let weekModels = byModel.values.sorted { ($0.cost, $0.tokens) > ($1.cost, $1.tokens) }
+        let weekModels = AgentModelUsage.ranked(Array(byModel.values))
 
-        let weekDaily: [Double] = (0..<7).map { offset in
-            guard let day = calendar.date(byAdding: .day, value: offset - 6, to: now) else { return 0 }
-            return dailyCost[DayKey(date: day, calendar: calendar)] ?? 0
+        let weekDaily: [AgentCostEstimate] = (0..<7).map { offset in
+            guard let day = calendar.date(byAdding: .day, value: offset - 6, to: now) else { return AgentCostEstimate() }
+            return dailyCost[DayKey(date: day, calendar: calendar)] ?? AgentCostEstimate()
         }
 
         let history = dailyCost
-            .map { AgentDailyActivity(day: $0.key, cost: $0.value) }
+            .map { AgentDailyActivity(day: $0.key, costEstimate: $0.value) }
             .sorted { $0.day < $1.day }
+        var historyCost = AgentCostEstimate()
+        for day in history { historyCost.merge(day.costEstimate) }
+        func namedSpend(_ costs: [String: AgentCostEstimate]) -> [AgentNamedSpend] {
+            costs.map { AgentNamedSpend(name: $0.key, costEstimate: $0.value) }.sorted {
+                let lhs = $0.cost ?? 0, rhs = $1.cost ?? 0
+                return lhs == rhs ? $0.name < $1.name : lhs > rhs
+            }
+        }
 
         return Breakdown(
             todayTokens: todayTokens,
-            estimatedCostToday: dailyCost[todayKey],
-            hourlySpendToday: hourlyToday,
-            modelSpendToday: modelToday.map { AgentNamedSpend(name: $0.key, cost: $0.value) }.sorted { $0.cost > $1.cost },
-            projectSpendToday: projectToday.map { AgentNamedSpend(name: $0.key, cost: $0.value) }.sorted { $0.cost > $1.cost },
+            todayCostEstimate: dailyCost[todayKey] ?? AgentCostEstimate(),
+            hourlyCostEstimatesToday: hourlyToday,
+            modelSpendToday: namedSpend(modelToday),
+            projectSpendToday: namedSpend(projectToday),
             dailyHistory: history,
-            totalCostInHistory: history.reduce(0) { $0 + $1.cost },
-            activeDaysInHistory: history.filter { $0.cost > 0 }.count,
-            busiestDay: history.max { $0.cost < $1.cost },
+            historyCostEstimate: historyCost,
+            activeDaysInHistory: history.filter { $0.costEstimate.hasUsage }.count,
+            busiestDay: historyCost.isComplete ? history.max { ($0.cost ?? 0) < ($1.cost ?? 0) } : nil,
             fiveHourBlock: activeBlock(now: now),
             week: week,
-            weekDailyCost: weekDaily,
+            weekDailyCostEstimates: weekDaily,
             weekModels: weekModels
         )
     }
 
-    private func cost(of event: AgentUsageEvent) -> Double {
-        event.model.flatMap { AgentPricing.estimatedCost(model: $0, tokens: event.tokens) } ?? 0
+    private func cost(of event: AgentUsageEvent) -> Double? {
+        event.model.flatMap { AgentPricing.estimatedCost(model: $0, tokens: event.tokens) }
     }
 
     /// A block opens at the first event after the previous one ended
@@ -155,7 +183,7 @@ final class AgentUsageAggregator {
         var block = AgentUsageWindow(start: start, end: end)
         for event in events where event.date >= start && event.date <= now {
             block.tokens += event.tokens
-            block.cost += cost(of: event)
+            block.costEstimate.add(cost(of: event), tokens: event.tokens.totalTokens)
         }
         return block
     }

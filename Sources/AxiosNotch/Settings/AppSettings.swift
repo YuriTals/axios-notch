@@ -96,7 +96,18 @@ final class AppSettings: ObservableObject {
         return true
     }
 
-    func removeCustomTool(id: String) { customTools.removeAll { $0.id == id } }
+    @Published private(set) var customToolRemovalError: String?
+
+    @discardableResult
+    func removeCustomTool(id: String, sessions: TerminalSessionStore = .shared) -> Bool {
+        guard sessions.keys(for: .custom(id)).isEmpty else {
+            customToolRemovalError = tr("Encerre as abas desta ferramenta antes de removê-la.", "Close this tool's tabs before removing it.")
+            return false
+        }
+        customToolRemovalError = nil
+        customTools.removeAll { $0.id == id }
+        return true
+    }
 
     @Published var accent: AccentChoice { didSet { defaults.set(accent.rawValue, forKey: "accent") } }
 

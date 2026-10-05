@@ -52,25 +52,25 @@ final class SavedTabsTests: XCTestCase {
         try FileManager.default.createDirectory(at: two, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: base) }
 
-        let first = TerminalSessionStore()
+        let first = ShellIntegrationSupport.store()
+        defer { for key in first.keys { first.close(key) } }
         let a = first.openSession(.shell, directory: one.path)
         let b = first.openSession(.shell, directory: two.path)
         first.select(a)                                                                   // the *first* tab is the selected one
-        let settle = expectation(description: "shells started"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { settle.fulfill() }
-        wait(for: [settle], timeout: 4)
+        try ShellIntegrationSupport.waitForPrompt(in: [
+            try XCTUnwrap(first.view(for: a)), try XCTUnwrap(first.view(for: b))
+        ])
         let saved = first.snapshot()
         for key in first.keys { first.close(key) }
         XCTAssertEqual(saved.tabs.count, 2)
         XCTAssertEqual(saved.tabs.map(\.wasSelected), [true, false])
-        _ = b
-
-        let second = TerminalSessionStore()
+        let second = ShellIntegrationSupport.store()
         defer { for key in second.keys { second.close(key) } }
         XCTAssertEqual(second.restoreTabs(saved), 2)
         XCTAssertEqual(second.keys.count, 2)
         XCTAssertEqual(second.selectedKey(for: .shell)?.number, 1)                           // selection restored
-        let settle2 = expectation(description: "restored shells started"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { settle2.fulfill() }
-        wait(for: [settle2], timeout: 4)
+        let restoredViews = try second.keys.map { try XCTUnwrap(second.view(for: $0)) }
+        try ShellIntegrationSupport.waitForPrompt(in: restoredViews)
         let folders = second.keys.compactMap { second.currentDirectory(for: $0) }.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path }
         XCTAssertEqual(folders, [one, two].map { $0.resolvingSymlinksInPath().path })
 
