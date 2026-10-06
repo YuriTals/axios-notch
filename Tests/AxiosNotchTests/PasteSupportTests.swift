@@ -100,12 +100,11 @@ final class PasteSupportTests: XCTestCase {
     }
 
     func testDroppingFilesPastesTheirPathsIntoARealShell() throws {
-        let store = TerminalSessionStore()
+        let store = ShellIntegrationSupport.store()
         defer { for key in store.keys { store.close(key) } }
         let key = store.ensureSelected(.shell)
         let view = try XCTUnwrap(store.view(for: key))
-        let settle = expectation(description: "shell started"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { settle.fulfill() }
-        wait(for: [settle], timeout: 4)
+        try ShellIntegrationSupport.waitForPrompt(in: [view])
 
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("axios drop \(UUID().uuidString.prefix(6))")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -118,9 +117,10 @@ final class PasteSupportTests: XCTestCase {
         XCTAssertEqual(view.draggingEntered(drop), .copy)
         XCTAssertTrue(view.performDragOperation(drop))
 
-        let echoed = expectation(description: "shell echoes the pasted text"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { echoed.fulfill() }
-        wait(for: [echoed], timeout: 4)
-        let screen = AnswerExtractor.lines(of: String(data: view.getTerminal().getBufferAsData(), encoding: .utf8) ?? "").joined(separator: "")
+        try ShellIntegrationSupport.wait("shell echoes the pasted text", timeout: 5) {
+            ShellIntegrationSupport.screen(of: view).contains("uma\\ foto.png")
+        }
+        let screen = ShellIntegrationSupport.screen(of: view)
         XCTAssertTrue(screen.contains("uma\\ foto.png"), "the escaped path should be on the prompt line: \(screen)")
     }
 

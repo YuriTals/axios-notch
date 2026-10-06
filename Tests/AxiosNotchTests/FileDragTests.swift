@@ -117,7 +117,7 @@ final class FolderDropTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: base) }
         let one = try makeDir("um", in: base), two = try makeDir("dois", in: base)
 
-        let store = TerminalSessionStore()
+        let store = ShellIntegrationSupport.store()
         defer { for key in store.keys { store.close(key) } }
         store.ensureSelected(.shell)                                                       // a tab already exists
         let first = store.openSession(.shell, directory: one.path)
@@ -125,8 +125,7 @@ final class FolderDropTests: XCTestCase {
         XCTAssertEqual(store.keys(for: .shell).count, 3, "folders must open new tabs, never reuse the old one")
         XCTAssertEqual(store.selectedKey(for: .shell), second)
 
-        let settle = expectation(description: "shells started"); DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { settle.fulfill() }
-        wait(for: [settle], timeout: 4)
+        try ShellIntegrationSupport.waitForPrompt(in: [try XCTUnwrap(store.view(for: first)), try XCTUnwrap(store.view(for: second))])
         let resolved = { (key: SessionKey) in store.currentDirectory(for: key).map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path } }
         XCTAssertEqual(resolved(first), one.resolvingSymlinksInPath().path)
         XCTAssertEqual(resolved(second), two.resolvingSymlinksInPath().path)

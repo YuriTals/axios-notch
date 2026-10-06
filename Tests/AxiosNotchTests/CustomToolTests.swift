@@ -92,7 +92,7 @@ final class CustomToolTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         settings.addCustomTool(name: "Test", command: "echo test")
         let tool = try XCTUnwrap(settings.customTools.first)
-        let sessions = TerminalSessionStore()
+        let sessions = ShellIntegrationSupport.store()
         defer { for key in sessions.keys { sessions.close(key) } }
         let first = sessions.openSession(.custom(tool.id), directory: nil)
         let second = sessions.openSession(.custom(tool.id), directory: nil)
@@ -184,7 +184,7 @@ final class CustomToolTests: XCTestCase {
 
     /// A registered tool really runs in a tab: a command that prints and then waits.
     func testAnExtraToolRunsItsCommandInATab() throws {
-        let store = TerminalSessionStore()
+        let store = ShellIntegrationSupport.store()
         defer { for key in store.keys { store.close(key) } }
         // The store reads tools from the shared settings, so register it there for the test and tidy up.
         let before = AppSettings.shared.customTools
@@ -193,9 +193,11 @@ final class CustomToolTests: XCTestCase {
         let registered = try XCTUnwrap(AppSettings.shared.customTools.first { $0.name == "Eco" })
 
         let key = store.openSession(.custom(registered.id), directory: nil)
-        let started = expectation(description: "command ran"); DispatchQueue.main.asyncAfter(deadline: .now() + 2) { started.fulfill() }
-        wait(for: [started], timeout: 5)
-        let screen = String(data: try XCTUnwrap(store.view(for: key)).getTerminal().getBufferAsData(), encoding: .utf8) ?? ""
+        let view = try XCTUnwrap(store.view(for: key))
+        try ShellIntegrationSupport.wait("command ran", timeout: 8) {
+            ShellIntegrationSupport.screen(of: view).contains("FERRAMENTA_PERSONALIZADA_OK")
+        }
+        let screen = ShellIntegrationSupport.screen(of: view)
         XCTAssertTrue(screen.contains("FERRAMENTA_PERSONALIZADA_OK"), screen)
         XCTAssertNil(store.lastAnswer(for: key), "no answer copying for tools we cannot read")
     }

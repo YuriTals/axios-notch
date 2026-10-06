@@ -7,13 +7,24 @@ enum ShellIntegrationSupport {
 
     static func store() -> TerminalSessionStore {
         TerminalSessionStore { view, tool, directory in
-            precondition(tool == .shell)
-            view.startProcess(executable: "/bin/zsh", args: ["-f"], environment: [
+            // Same command the app would run, but through `zsh -f` instead of the
+            // user's login shell, so no profile (Oh My Zsh, prompts, slow init) is read.
+            var args = ["-f"]
+            if tool != .shell {
+                let launch = PTYSession.launchArguments(for: tool).args
+                args += launch.drop { $0 == "-l" }
+            }
+            view.startProcess(executable: "/bin/zsh", args: args, environment: [
                 "TERM=xterm-256color", "LANG=en_US.UTF-8",
                 "HOME=\(NSHomeDirectory())", "PATH=/usr/bin:/bin:/usr/sbin:/sbin",
                 "PROMPT=\(prompt)", "RPROMPT=", "PROMPT_EOL_MARK="
             ], currentDirectory: directory)
         }
+    }
+
+    /// The screen text with wrapped rows glued back together, for "does it contain X".
+    static func screen(of view: LocalProcessTerminalView) -> String {
+        lines(in: view).joined()
     }
 
     static func lines(in view: LocalProcessTerminalView) -> [String] {

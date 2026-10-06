@@ -1,12 +1,12 @@
 import XCTest
 @testable import AxiosNotch
 
-/// These open real login shells (the clean-shell tool), so they exercise the
+/// These open real shells (`zsh -f`, independent of the user's profile), so they exercise the
 /// actual session bookkeeping, and close them again before finishing.
 final class TerminalTabsTests: XCTestCase {
     private var store: TerminalSessionStore!
 
-    override func setUp() { store = TerminalSessionStore() }
+    override func setUp() { store = ShellIntegrationSupport.store() }
     override func tearDown() {
         for key in store.keys { store.close(key) }
         store = nil
@@ -129,10 +129,8 @@ final class TerminalTabsTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: folder) }
 
         let key = store.openSession(.shell, directory: folder.path)
-        // Give the shell a moment to start, then ask the OS where it is.
-        let expectation = expectation(description: "shell started")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { expectation.fulfill() }
-        wait(for: [expectation], timeout: 3)
+        // Wait until the shell is ready, then ask the OS where it is.
+        try ShellIntegrationSupport.waitForPrompt(in: [try XCTUnwrap(store.view(for: key))])
         let actual = store.currentDirectory(for: key).map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path }
         XCTAssertEqual(actual, folder.resolvingSymlinksInPath().path)
         XCTAssertEqual(store.title(for: key), folder.lastPathComponent)
