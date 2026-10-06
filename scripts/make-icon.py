@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds Packaging/AppIcon.icns from "Axios Logo.png": the white asterisk on a
+"""Builds Packaging/AppIcon.icns from "Packaging/AxiosLogo.png": the white asterisk on a
 dark macOS-style rounded square. Needs Pillow; the result is committed, so
 this only has to be run when the artwork changes."""
 import os, subprocess, shutil, tempfile
@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFilter
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SIZE = 1024
 
-logo = Image.open(os.path.join(ROOT, "Axios Logo.png")).convert("L")
+logo = Image.open(os.path.join(ROOT, "Packaging", "AxiosLogo.png")).convert("L")
 mask = logo.resize((int(SIZE * 0.58),) * 2, Image.LANCZOS)          # white strokes = opaque
 
 # Icon body: ~82% of the canvas, like the system's own icons.
