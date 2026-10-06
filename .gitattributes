@@ -1,0 +1,3 @@
+# Build tooling is not app code: keep GitHub's language bar about the Swift sources.
+scripts/** linguist-vendored
+Packaging/** linguist-vendored
