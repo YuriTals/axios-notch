@@ -17,9 +17,11 @@ struct LimitAlert: Equatable {
     let window: LimitWindow
     let kind: Kind
     let percent: Double
+    /// The independent quota the alert is about (an Antigravity model family), if any.
+    var group: String? = nil
 
     var message: String {
-        let name = provider.displayName
+        let name = group.map { "\(provider.displayName) · \($0)" } ?? provider.displayName
         let phrase: String
         switch window {
         case .fiveHour: phrase = tr("da janela de 5h", "of the 5h window")
@@ -52,7 +54,7 @@ struct LimitAlert: Equatable {
 struct LimitAlertTracker {
     static let thresholds = [80, 90]
 
-    private struct Key: Hashable { let provider: AgentProvider; let window: LimitWindow }
+    private struct Key: Hashable { let provider: AgentProvider; let window: LimitWindow; var group: String? = nil }
     private struct Seen {
         var resetsAt: Date?
         var level: Int
@@ -69,8 +71,10 @@ struct LimitAlertTracker {
         thresholds.last(where: { percent >= Double($0) }) ?? 0
     }
 
-    mutating func observe(provider: AgentProvider, window: LimitWindow, limit: AgentLimit) -> LimitAlert? {
-        let key = Key(provider: provider, window: window)
+    /// `group` is a quota's id; `groupLabel` is what the alert calls it.
+    mutating func observe(provider: AgentProvider, window: LimitWindow, group: String? = nil, groupLabel: String? = nil,
+                          limit: AgentLimit) -> LimitAlert? {
+        let key = Key(provider: provider, window: window, group: group)
         let level = Self.level(for: limit.percent)
         guard let previous = seen[key] else {
             seen[key] = Seen(resetsAt: limit.resetsAt, level: level, percent: limit.percent)
@@ -89,10 +93,10 @@ struct LimitAlertTracker {
 
         if !sameWindow {
             return previous.level > 0
-                ? LimitAlert(provider: provider, window: window, kind: .reset, percent: limit.percent)
+                ? LimitAlert(provider: provider, window: window, kind: .reset, percent: limit.percent, group: groupLabel)
                 : nil
         }
         guard level > previous.level else { return nil }
-        return LimitAlert(provider: provider, window: window, kind: .threshold(level), percent: limit.percent)
+        return LimitAlert(provider: provider, window: window, kind: .threshold(level), percent: limit.percent, group: groupLabel)
     }
 }

@@ -103,8 +103,7 @@ final class AgentUsageStore: ObservableObject {
             }
             for window in LimitWindow.allCases {
                 let key = "\(provider.rawValue).\(window.rawValue)"
-                let reading = limits[provider]?.rateLimits
-                let limit = window == .fiveHour ? reading?.fiveHour : reading?.weekly
+                let limit = limits[provider]?.rateLimits?.mostUsedLimit(in: window)
                 if limit == nil || forecastExpiry[key].map({ $0 <= now }) ?? true {
                     forecasts[key] = nil
                     forecastExpiry[key] = nil
@@ -115,23 +114,39 @@ final class AgentUsageStore: ObservableObject {
     }
 
     func process(limits: AgentRateLimits, for provider: AgentProvider, now: Date = Date()) {
-        for (window, limit) in [(LimitWindow.fiveHour, limits.fiveHour), (.weekly, limits.weekly)] {
+        for window in LimitWindow.allCases {
             let key = "\(provider.rawValue).\(window.rawValue)"
-            guard let limit, limit.resetsAt.map({ $0 > now }) ?? true else {
+            // Claude and Codex report one limit per window. Antigravity reports independent
+            // quotas per model family: each is tracked on its own (never summed), and the
+            // card's forecast belongs to the family the card shows, the most used one.
+            let direct = window == .fiveHour ? limits.fiveHour : limits.weekly
+            let tracked: [(group: AgentQuotaGroup?, limit: AgentLimit)] = direct.map { [(nil, $0)] }
+                ?? (limits.quotaGroups ?? []).compactMap { group in
+                    (window == .fiveHour ? group.fiveHour : group.weekly).map { (group, $0) }
+                }
+            let live = tracked.filter { $0.limit.resetsAt.map { $0 > now } ?? true }
+            guard !live.isEmpty else {
                 forecasts[key] = nil; forecastExpiry[key] = nil
                 forecaster.forget(provider: provider, window: window)
                 continue
             }
-            forecaster.record(provider: provider, window: window, limit: limit, now: now)
-            if let forecast = forecaster.forecast(provider: provider, window: window, limit: limit, now: now), forecast.beforeReset {
+            var shown: (group: AgentQuotaGroup?, limit: AgentLimit)?
+            for entry in live {
+                forecaster.record(provider: provider, window: window, group: entry.group?.id, limit: entry.limit, now: now)
+                if shown == nil || entry.limit.percent > shown!.limit.percent { shown = entry }
+                if let alert = alertTracker.observe(provider: provider, window: window, group: entry.group?.id,
+                                                    groupLabel: entry.group?.label, limit: entry.limit) { alerts.send(alert) }
+            }
+            if let shown,
+               let forecast = forecaster.forecast(provider: provider, window: window, group: shown.group?.id, limit: shown.limit, now: now),
+               forecast.beforeReset {
                 forecasts[key] = forecast
                 forecastExpiry[key] = min(now.addingTimeInterval(limitsInterval * 2),
-                                          limit.resetsAt ?? .distantFuture,
+                                          shown.limit.resetsAt ?? .distantFuture,
                                           now.addingTimeInterval(forecast.secondsToFull))
             } else {
                 forecasts[key] = nil; forecastExpiry[key] = nil
             }
-            if let alert = alertTracker.observe(provider: provider, window: window, limit: limit) { alerts.send(alert) }
         }
     }
 

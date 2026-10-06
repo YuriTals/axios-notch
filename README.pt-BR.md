@@ -27,7 +27,7 @@
 ## Destaques
 
 - **Ferramentas ativas:** Claude, Codex, Antigravity, até duas ferramentas suas e um Terminal, num clique.
-- **Uso do plano:** % das janelas de 5 h e semanal de Claude e Codex, com previsão e avisos em 80 % e 90 %.
+- **Uso do plano:** clique em Claude, Codex ou Antigravity para ver as janelas de 5 h e semanal no mesmo layout, com previsão de ritmo e avisos em 80 % e 90 %. Claude e Codex mostram o uso por modelo nos últimos 7 dias; o Antigravity mostra a cota de cada família de modelos (Gemini; Claude e GPT), porque o histórico da CLI dele não informa o modelo.
 - **Terminais persistentes** dentro do notch: copie a última resposta e cole ou arraste imagens, arquivos e pastas.
 - **Avisos:** resposta pronta e pedido de aprovação, com notificação opcional do macOS.
 - **Vários monitores, temas, fontes Nerd Font incluídas**, português e inglês, e um visual Liquid Glass opcional (macOS 26+).

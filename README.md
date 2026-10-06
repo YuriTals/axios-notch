@@ -27,7 +27,7 @@
 ## Highlights
 
 - **Active tools:** Claude, Codex, Antigravity, up to two tools of your own and a Terminal, one click away.
-- **Plan usage:** click Claude, Codex or Antigravity to see that CLI's 5-hour and weekly usage. Antigravity shows its account's highest quota utilization and local token/cache totals; forecasts and alerts at 80% and 90% remain available for Claude and Codex.
+- **Plan usage:** click Claude, Codex or Antigravity to see that CLI's 5-hour and weekly usage in the same layout, with a pace forecast and alerts at 80% and 90%. Claude and Codex show a by-model breakdown of the last 7 days; Antigravity shows each model family's own quota (Gemini; Claude and GPT), since its CLI history does not name the model.
 - **Persistent terminals** inside the notch: copy the last answer, and paste or drag images, files and folders.
 - **Notices:** answer ready and approval requests, with an optional macOS notification.
 - **Multiple monitors, themes, bundled Nerd Fonts**, English and Portuguese, and an optional Liquid Glass look (macOS 26+).

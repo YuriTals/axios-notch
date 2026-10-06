@@ -23,19 +23,20 @@ struct LimitForecaster {
     static let minimumSlope = 1.0 / 3600
     static let horizon: TimeInterval = 7 * 24 * 3600
 
-    private struct Key: Hashable { let provider: AgentProvider; let window: LimitWindow }
+    /// `group` separates independent quotas of one provider (Antigravity model families).
+    private struct Key: Hashable { let provider: AgentProvider; let window: LimitWindow; var group: String? = nil }
     private struct Sample { let date: Date; let percent: Double }
     private var samples: [Key: [Sample]] = [:]
     private var lastReset: [Key: Date] = [:]
 
+    /// Forgets the window's history, including every group's.
     mutating func forget(provider: AgentProvider, window: LimitWindow) {
-        let key = Key(provider: provider, window: window)
-        samples[key] = nil
-        lastReset[key] = nil
+        for key in samples.keys where key.provider == provider && key.window == window { samples[key] = nil }
+        for key in lastReset.keys where key.provider == provider && key.window == window { lastReset[key] = nil }
     }
 
-    mutating func record(provider: AgentProvider, window: LimitWindow, limit: AgentLimit, now: Date) {
-        let key = Key(provider: provider, window: window)
+    mutating func record(provider: AgentProvider, window: LimitWindow, group: String? = nil, limit: AgentLimit, now: Date) {
+        let key = Key(provider: provider, window: window, group: group)
         var list = samples[key] ?? []
 
         // A new window (usage dropped, or the reset time moved) starts a new history.
@@ -48,8 +49,8 @@ struct LimitForecaster {
         samples[key] = list
     }
 
-    func forecast(provider: AgentProvider, window: LimitWindow, limit: AgentLimit, now: Date) -> LimitForecast? {
-        let list = (samples[Key(provider: provider, window: window)] ?? [])
+    func forecast(provider: AgentProvider, window: LimitWindow, group: String? = nil, limit: AgentLimit, now: Date) -> LimitForecast? {
+        let list = (samples[Key(provider: provider, window: window, group: group)] ?? [])
             .filter { now.timeIntervalSince($0.date) <= Self.lookback }
         guard list.count >= Self.minimumSamples,
               let first = list.first, let last = list.last,

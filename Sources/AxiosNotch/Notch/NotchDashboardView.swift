@@ -22,13 +22,13 @@ struct NotchUsageView: View {
                 LimitCard(
                     title: tr("Janela de 5h", "5h window"), limit: fiveHourLimit, state: limits, accent: accent,
                     resetText: { UsageFormat.remaining(until: $0, now: $1) },
-                    footnote: provider == .antigravity ? tr("maior utilização da conta", "highest account utilization") : footnote(summary?.fiveHourBlock),
+                    footnote: footnote(summary?.fiveHourBlock),
                     forecast: forecasts["\(provider.rawValue).\(LimitWindow.fiveHour.rawValue)"]
                 )
                 LimitCard(
                     title: tr("Semana", "Week"), limit: weeklyLimit, state: limits, accent: accent,
                     resetText: { date, _ in UsageFormat.weekday(of: date) },
-                    footnote: provider == .antigravity ? tr("maior utilização da conta", "highest account utilization") : footnote(summary?.week),
+                    footnote: footnote(summary?.week),
                     forecast: forecasts["\(provider.rawValue).\(LimitWindow.weekly.rawValue)"]
                 )
             }
@@ -37,13 +37,9 @@ struct NotchUsageView: View {
                     .help(tr("Exibindo a última leitura válida; a atualização falhou.", "Showing the last valid reading; refresh failed."))
             }
             if provider == .antigravity {
-                Card(title: tr("Histórico local · 7 dias", "Local history · 7 days"), trailing: nil) {
-                    let tokens = summary?.week.tokens ?? AgentTokens()
-                    Text(tr("\(UsageFormat.tokens(tokens.totalTokens)) tokens · \(UsageFormat.tokens(tokens.cacheRead)) em cache", "\(UsageFormat.tokens(tokens.totalTokens)) tokens · \(UsageFormat.tokens(tokens.cacheRead)) cached"))
-                        .font(.system(size: 12, weight: .medium)).monospacedDigit().foregroundStyle(.white.opacity(0.8))
-                    Text(tr("O histórico do CLI não informa o modelo nem o custo.", "CLI history does not report the model or cost."))
-                        .font(.system(size: 10)).foregroundStyle(.white.opacity(0.4)).lineLimit(1)
-                }.frame(height: 76)
+                // The CLI history names no model, so "by model" is the account's own quota per
+                // model family. Independent quotas: listed side by side, never summed.
+                QuotaGroupSection(groups: limits.rateLimits?.quotaGroups ?? [], accent: accent)
             } else {
                 ModelUsageSection(provider: provider, models: summary?.weekModels ?? [], caps: limits.rateLimits?.modelLimits ?? [])
             }
@@ -345,7 +341,58 @@ private struct ModelUsageSection: View {
     }
 }
 
+/// Antigravity's "by model": each model family's own 5-hour and weekly quota.
+private struct QuotaGroupSection: View {
+    let groups: [AgentQuotaGroup]
+    let accent: Color
+
+    private func tint(_ percent: Double) -> Color {
+        if percent >= 90 { return Color(red: 0.95, green: 0.33, blue: 0.30) }
+        if percent >= 70 { return Color(red: 0.97, green: 0.68, blue: 0.25) }
+        return accent
+    }
+
+    var body: some View {
+        Card(title: tr("Por modelo · cota", "By model · quota"),
+             trailing: tr("cotas independentes", "independent quotas")) {
+            if groups.isEmpty {
+                Text(tr("Sem dados de cota por modelo", "No per-model quota data"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.4))
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(groups.prefix(3)) { group in
+                        let five = group.fiveHour?.percent, week = group.weekly?.percent
+                        let strongest = max(five ?? 0, week ?? 0)
+                        HStack(spacing: 8) {
+                            Text(group.label)
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.white.opacity(0.7))
+                                .lineLimit(1)
+                                .frame(width: 128, alignment: .leading)
+                            ProgressBar(progress: min(max(strongest / 100, 0), 1), accent: tint(strongest))
+                            Text(UsageFormat.quotaSummary(fiveHour: five, weekly: week))
+                                .font(.system(size: 10.5))
+                                .monospacedDigit()
+                                .foregroundStyle(.white.opacity(0.7))
+                                .lineLimit(1)
+                                .frame(width: 112, alignment: .trailing)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(height: 76)
+    }
+}
+
 enum UsageFormat {
+    /// "5h 0% · sem. 1%": one model family's two windows; a missing window shows "—".
+    static func quotaSummary(fiveHour: Double?, weekly: Double?) -> String {
+        func text(_ value: Double?) -> String { value.map { "\(Int($0.rounded()))%" } ?? "—" }
+        return tr("5h \(text(fiveHour)) · sem. \(text(weekly))", "5h \(text(fiveHour)) · wk \(text(weekly))")
+    }
+
     static func tokens(_ value: Int) -> String {
         if value >= 100_000_000 { return String(format: "%.0fM", Double(value) / 1_000_000) }
         if value >= 1_000_000 { return String(format: "%.1fM", Double(value) / 1_000_000) }
