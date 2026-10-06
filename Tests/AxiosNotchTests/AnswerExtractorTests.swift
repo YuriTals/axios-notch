@@ -59,7 +59,7 @@ final class CLIAnswerTests: XCTestCase {
     private let claudeScreen = """
      ▐▛███▜▌   Claude Code v2.1.287
     ▝▜█████▛▘  Sonnet 5.5 · Claude Pro
-      ▘▘ ▝▝    /Users/yuri
+      ▘▘ ▝▝    /Users/dev
 
     ▌ Using Sonnet 5.5 (from .claude/settings.json) · /model
 

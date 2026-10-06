@@ -3,15 +3,15 @@ import XCTest
 
 final class ProcessDirectoryTests: XCTestCase {
     func testProjectNameIsTheFolderName() {
-        XCTAssertEqual(ProcessDirectory.projectName(forPath: "/Users/yuri/Documents/Projects/Axios Notch", home: "/Users/yuri"), "Axios Notch")
-        XCTAssertEqual(ProcessDirectory.projectName(forPath: "/Users/yuri/code/app/", home: "/Users/yuri"), "app")
+        XCTAssertEqual(ProcessDirectory.projectName(forPath: "/Users/dev/Documents/Projects/Axios Notch", home: "/Users/dev"), "Axios Notch")
+        XCTAssertEqual(ProcessDirectory.projectName(forPath: "/Users/dev/code/app/", home: "/Users/dev"), "app")
     }
 
     func testHomeAndRootAreNotProjects() {
-        XCTAssertNil(ProcessDirectory.projectName(forPath: "/Users/yuri", home: "/Users/yuri"))
-        XCTAssertNil(ProcessDirectory.projectName(forPath: "/Users/yuri/", home: "/Users/yuri"))
-        XCTAssertNil(ProcessDirectory.projectName(forPath: "/", home: "/Users/yuri"))
-        XCTAssertNil(ProcessDirectory.projectName(forPath: "", home: "/Users/yuri"))
+        XCTAssertNil(ProcessDirectory.projectName(forPath: "/Users/dev", home: "/Users/dev"))
+        XCTAssertNil(ProcessDirectory.projectName(forPath: "/Users/dev/", home: "/Users/dev"))
+        XCTAssertNil(ProcessDirectory.projectName(forPath: "/", home: "/Users/dev"))
+        XCTAssertNil(ProcessDirectory.projectName(forPath: "", home: "/Users/dev"))
     }
 
     func testReadsTheDirectoryOfARunningProcess() {

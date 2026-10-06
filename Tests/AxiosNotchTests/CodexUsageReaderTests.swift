@@ -61,8 +61,8 @@ final class CodexUsageReaderTests: XCTestCase {
         let file = dir.appendingPathComponent("rollout-real-shape.jsonl")
 
         let contents = """
-        {"type":"session_meta","payload":{"cwd":"/Users/yuri/Downloads/GBA","cli_version":"0.154.0-alpha.6.2"}}
-        {"type":"turn_context","payload":{"cwd":"/Users/yuri/Downloads/GBA","model":"gpt-5.6-terra"}}
+        {"type":"session_meta","payload":{"cwd":"/Users/dev/Downloads/GBA","cli_version":"0.154.0-alpha.6.2"}}
+        {"type":"turn_context","payload":{"cwd":"/Users/dev/Downloads/GBA","model":"gpt-5.6-terra"}}
         {"type":"token_usage_record","payload":{"usage":{"input_tokens":27890,"cached_input_tokens":21248,"cache_write_input_tokens":0,"output_tokens":127,"reasoning_output_tokens":12,"total_tokens":28017}}}
 
         """

@@ -4,3 +4,6 @@
 *.xcodeproj
 xcuserdata/
 /build/
+
+# Private project notes (Obsidian vault)
+Obsidian/

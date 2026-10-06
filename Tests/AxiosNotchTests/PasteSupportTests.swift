@@ -50,7 +50,7 @@ final class PasteSupportTests: XCTestCase {
     }
 
     func testPathsAreEscapedLikeADragOntoTerminal() {
-        XCTAssertEqual(ShellPath.escape("/Users/yuri/Desktop/uma foto (1).png"), "/Users/yuri/Desktop/uma\\ foto\\ \\(1\\).png")
+        XCTAssertEqual(ShellPath.escape("/Users/dev/Desktop/uma foto (1).png"), "/Users/dev/Desktop/uma\\ foto\\ \\(1\\).png")
         XCTAssertEqual(ShellPath.escape("/tmp/simple-file_1.2.png"), "/tmp/simple-file_1.2.png")
         XCTAssertEqual(ShellPath.escape("/tmp/a'b\"c&d$e"), "/tmp/a\\'b\\\"c\\&d\\$e")
         XCTAssertEqual(ShellPath.escape("/tmp/ação 写真.png"), "/tmp/ação\\ 写真.png")            // letters stay, the space is escaped

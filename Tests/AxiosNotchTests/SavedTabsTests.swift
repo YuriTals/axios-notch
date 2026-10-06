@@ -8,7 +8,7 @@ final class SavedTabsTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         XCTAssertEqual(SavedTabs.load(defaults: defaults), SavedTabs())               // nothing yet
         let saved = SavedTabs(tabs: [
-            SavedTab(provider: "claude", directory: "/Users/yuri/code/a", wasSelected: true),
+            SavedTab(provider: "claude", directory: "/Users/dev/code/a", wasSelected: true),
             SavedTab(provider: nil, directory: nil, wasSelected: false),
         ])
         saved.save(defaults: defaults)
