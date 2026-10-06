@@ -55,7 +55,7 @@ xattr -dr com.apple.quarantine "/Applications/Axios Notch.app"
 
 ## Privacy
 
-Everything happens on your machine. To show plan usage, the app reads the login the CLIs already keep (Claude Code's Keychain item and `~/.codex/auth.json`) and only contacts `api.anthropic.com` and `chatgpt.com`, about every 60 s. It does **not store, log or refresh** tokens. The app also asks `api.github.com` for the latest release (at launch and about every 12 h) to offer updates; you can turn this off in Settings. Those two endpoints are undocumented and may change without notice. The feedback button opens your mail app with versions and preferences, never tokens, conversations or folders.
+Everything happens on your machine. To show plan usage, the app reads the login the CLIs already keep (Claude Code's Keychain item, `~/.codex/auth.json` and the Antigravity CLI's sign-in in the Keychain or its token file) and only contacts `api.anthropic.com`, `chatgpt.com` and `daily-cloudcode-pa.googleapis.com`, about every 60 s. It does **not store, log or refresh** tokens. The app also asks `api.github.com` for the latest release (at launch and about every 12 h) to offer updates; you can turn this off in Settings. Those usage endpoints are undocumented and may change without notice. The feedback button opens your mail app with versions and preferences, never tokens, conversations or folders.
 
 ## Build
 
